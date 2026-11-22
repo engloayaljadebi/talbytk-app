@@ -14,6 +14,10 @@ class OrdersState {
     this.orders = const [],
     this.isLoading = false,
     this.isSubmitting = false,
+    this.isLoadingMore = false,
+    this.hasMoreOrders = false,
+    this.nextPage = 1,
+    this.loadMoreErrorMessage,
     this.errorMessage,
     this.lastCreatedOrder,
   });
@@ -26,6 +30,11 @@ class OrdersState {
 
   /// هل يتم إرسال طلبية جديدة؟
   final bool isSubmitting;
+
+  final bool isLoadingMore;
+  final bool hasMoreOrders;
+  final int nextPage;
+  final String? loadMoreErrorMessage;
 
   /// معرّف الطلبية التي يتم تحديث حالتها حاليًا.
   ///
@@ -43,6 +52,11 @@ class OrdersState {
     List<OrderEntity>? orders,
     bool? isLoading,
     bool? isSubmitting,
+    bool? isLoadingMore,
+    bool? hasMoreOrders,
+    int? nextPage,
+    String? loadMoreErrorMessage,
+    bool clearLoadMoreErrorMessage = false,
     String? errorMessage,
     bool clearErrorMessage = false,
     OrderEntity? lastCreatedOrder,
@@ -52,6 +66,12 @@ class OrdersState {
       orders: orders ?? this.orders,
       isLoading: isLoading ?? this.isLoading,
       isSubmitting: isSubmitting ?? this.isSubmitting,
+      isLoadingMore: isLoadingMore ?? this.isLoadingMore,
+      hasMoreOrders: hasMoreOrders ?? this.hasMoreOrders,
+      nextPage: nextPage ?? this.nextPage,
+      loadMoreErrorMessage: clearLoadMoreErrorMessage
+          ? null
+          : loadMoreErrorMessage ?? this.loadMoreErrorMessage,
 
       // حذف معرّف الطلبية بعد انتهاء عملية التحديث.
       errorMessage: clearErrorMessage

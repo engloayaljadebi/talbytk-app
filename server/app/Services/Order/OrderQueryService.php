@@ -5,6 +5,7 @@ namespace App\Services\Order;
 use App\Models\Order;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Pagination\LengthAwarePaginator;
 
 final class OrderQueryService
 {
@@ -32,6 +33,35 @@ final class OrderQueryService
             ->get();
 
         foreach ($orders as $order) {
+            $order->setAttribute(
+                'aggregate_status',
+                $this->aggregateStatusResolver->resolve($order),
+            );
+        }
+
+        return $orders;
+    }
+
+    /**
+     * Paginated orders for clients that explicitly request pagination.
+     * Legacy clients continue using forUser().
+     */
+    public function forUserPaginated(
+        User $user,
+        int $perPage = 20,
+    ): LengthAwarePaginator {
+        $orders = Order::query()
+            ->where('user_id', $user->id)
+            ->with([
+                'items',
+                'recipients.response',
+                'recipients.items.response.selection',
+            ])
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->paginate($perPage);
+
+        foreach ($orders->items() as $order) {
             $order->setAttribute(
                 'aggregate_status',
                 $this->aggregateStatusResolver->resolve($order),

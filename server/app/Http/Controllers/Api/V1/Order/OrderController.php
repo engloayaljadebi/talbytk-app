@@ -26,6 +26,23 @@ class OrderController extends Controller
      */
     public function index(Request $request): AnonymousResourceCollection
     {
+        $validated = $request->validate([
+            'page' => ['sometimes', 'integer', 'min:1'],
+            'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        if (
+            array_key_exists('page', $validated) ||
+            array_key_exists('per_page', $validated)
+        ) {
+            return OrderResource::collection(
+                $this->orderQueryService->forUserPaginated(
+                    $request->user(),
+                    (int) ($validated['per_page'] ?? 20),
+                ),
+            );
+        }
+
         return OrderResource::collection(
             $this->orderQueryService->forUser($request->user()),
         );

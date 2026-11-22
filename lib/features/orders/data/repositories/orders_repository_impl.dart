@@ -5,14 +5,17 @@ import 'package:dio/dio.dart';
 import '../../domain/entities/orders_entity.dart';
 import '../../../auth/domain/services/account_session_fence.dart';
 import '../../domain/repositories/orders_repository.dart';
+import '../../domain/repositories/orders_paginated_reader.dart';
 import '../datasources/local/orders_local_datasource.dart';
 import '../datasources/orders_datasource.dart';
+import '../datasources/remote/orders_remote_datasource.dart';
 import '../mappers/orders_mapper.dart';
 import '../models/orders_model.dart';
 import 'package:uuid/uuid.dart';
 
-class OrdersRepositoryImpl implements OrdersRepository {
-  const OrdersRepositoryImpl(
+class OrdersRepositoryImpl
+    implements OrdersRepository, OrdersPaginatedReader, OrdersCachedPageReader {
+  OrdersRepositoryImpl(
     this.localDataSource, {
     required this._sessionFence,
     this.remoteDataSource,
@@ -21,6 +24,149 @@ class OrdersRepositoryImpl implements OrdersRepository {
   final OrdersLocalDataSource localDataSource;
   final OrdersDataSource? remoteDataSource;
   final AccountSessionFence _sessionFence;
+
+  bool _usingLocalPaging = false;
+  int _pagingEpoch = 0;
+  int _nextPage = 1;
+  int? _expectedTotal;
+  int? _expectedLastPage;
+  final List<OrderModel> _serverPageBuffer = <OrderModel>[];
+  final Set<String> _serverSeenIds = <String>{};
+
+  @override
+  Future<OrdersPageSlice<OrderEntity>> getCachedOrdersPage({
+    required int page,
+  }) async {
+    final lease = _sessionFence.capture();
+    lease.ensureCurrent();
+    final result = await localDataSource.getOrdersPage(page: page);
+    lease.ensureCurrent();
+    return OrdersPageSlice<OrderEntity>(
+      items: List<OrderEntity>.unmodifiable(
+        result.items.map(OrdersMapper.toEntity),
+      ),
+      page: result.page,
+      lastPage: result.lastPage,
+      total: result.total,
+    );
+  }
+
+  /// Fetch one page, never reconcile a partial server snapshot as complete.
+  @override
+  Future<OrdersPageSlice<OrderEntity>> getOrdersPage({
+    required int page,
+  }) async {
+    if (page < 1) throw ArgumentError.value(page, 'page');
+    final lease = _sessionFence.capture();
+    if (page == 1) {
+      _pagingEpoch++;
+      _nextPage = 1;
+      _usingLocalPaging = false;
+      _expectedTotal = null;
+      _expectedLastPage = null;
+      _serverPageBuffer.clear();
+      _serverSeenIds.clear();
+    }
+    final epoch = _pagingEpoch;
+    if (page != _nextPage) {
+      throw StateError('Orders pages must be requested sequentially.');
+    }
+
+    final remote = remoteDataSource;
+    if (remote is! OrdersRemoteDataSource || _usingLocalPaging) {
+      return _readLocalPage(page, lease, epoch);
+    }
+
+    try {
+      lease.ensureCurrent();
+      final result = await remote.getOrdersPage(page: page);
+      lease.ensureCurrent();
+      if (epoch != _pagingEpoch) {
+        throw StateError('Orders refresh superseded by a newer refresh.');
+      }
+      if (_expectedTotal != null &&
+          (_expectedTotal != result.total ||
+              _expectedLastPage != result.lastPage)) {
+        throw const FormatException('Orders pagination changed mid-refresh.');
+      }
+      final newIds = <String>{};
+      for (final order in result.items) {
+        if (_serverSeenIds.contains(order.id) || !newIds.add(order.id)) {
+          throw const FormatException('Duplicate order across pages.');
+        }
+      }
+      final candidate = [..._serverPageBuffer, ...result.items];
+
+      final pending = page == 1
+          ? await localDataSource.getPendingCreateOrders()
+          : const <OrderModel>[];
+      lease.ensureCurrent();
+      if (epoch != _pagingEpoch) {
+        throw StateError('Orders refresh superseded by a newer refresh.');
+      }
+      if (!result.hasMore) {
+        if (candidate.length != result.total) {
+          throw const FormatException('Incomplete orders pagination snapshot.');
+        }
+        lease.ensureCurrent();
+        await localDataSource.replaceServerSnapshotPreservingPendingCreates(
+          List<OrderModel>.unmodifiable(candidate),
+        );
+        lease.ensureCurrent();
+      }
+      _expectedTotal ??= result.total;
+      _expectedLastPage ??= result.lastPage;
+      _serverSeenIds.addAll(newIds);
+      _serverPageBuffer.addAll(result.items);
+      _nextPage = page + 1;
+      lease.ensureCurrent();
+      if (epoch != _pagingEpoch) {
+        throw StateError('Orders refresh superseded by a newer refresh.');
+      }
+      final pageIds = result.items.map((item) => item.id).toSet();
+      return OrdersPageSlice<OrderEntity>(
+        items: List<OrderEntity>.unmodifiable([
+          ...pending
+              .where((item) => !pageIds.contains(item.id))
+              .map(OrdersMapper.toEntity),
+          ...result.items.map(OrdersMapper.toEntity),
+        ]),
+        page: page,
+        lastPage: result.lastPage,
+        total: result.total,
+      );
+    } catch (error) {
+      lease.ensureCurrent();
+      if (epoch != _pagingEpoch) rethrow;
+      if (page == 1 && _shouldUseLocalReadFallback(error)) {
+        _usingLocalPaging = true;
+        return _readLocalPage(page, lease, epoch);
+      }
+      rethrow;
+    }
+  }
+
+  Future<OrdersPageSlice<OrderEntity>> _readLocalPage(
+    int page,
+    AccountSessionLease lease,
+    int epoch,
+  ) async {
+    lease.ensureCurrent();
+    final result = await localDataSource.getOrdersPage(page: page);
+    lease.ensureCurrent();
+    if (epoch != _pagingEpoch) {
+      throw StateError('Orders refresh superseded by a newer refresh.');
+    }
+    _nextPage = page + 1;
+    return OrdersPageSlice<OrderEntity>(
+      items: List<OrderEntity>.unmodifiable(
+        result.items.map(OrdersMapper.toEntity),
+      ),
+      page: result.page,
+      lastPage: result.lastPage,
+      total: result.total,
+    );
+  }
 
   @override
   Future<List<OrderEntity>> getOrders() async {

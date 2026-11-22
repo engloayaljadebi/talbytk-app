@@ -5,6 +5,7 @@ import 'package:drift/drift.dart';
 import '../../../../../core/database/app_database.dart';
 import '../../../../auth/domain/services/account_session_fence.dart';
 import '../../models/orders_model.dart';
+import '../../../domain/repositories/orders_paginated_reader.dart';
 import 'package:uuid/uuid.dart';
 import '../orders_datasource.dart';
 
@@ -54,6 +55,107 @@ class OrdersLocalDataSource implements OrdersDataSource {
       );
     }
 
+    lease.ensureCurrent();
+    return List<OrderModel>.unmodifiable(orders);
+  }
+
+  /// Reads only one local page. No remote snapshot reconciliation occurs.
+  Future<OrdersPageSlice<OrderModel>> getOrdersPage({
+    required int page,
+    int perPage = 20,
+  }) async {
+    if (page < 1 || perPage < 1) {
+      throw ArgumentError('Page and perPage must be positive.');
+    }
+    final lease = _sessionFence.capture();
+    final countExpression = _database.orderRecords.id.count();
+    final countQuery = _database.selectOnly(_database.orderRecords)
+      ..addColumns([countExpression])
+      ..where(_database.orderRecords.ownerUserId.equals(lease.ownerUserId));
+    final countRow = await countQuery.getSingle();
+    lease.ensureCurrent();
+    final total = countRow.read(countExpression) ?? 0;
+    final lastPage = total == 0 ? 1 : (total + perPage - 1) ~/ perPage;
+    if (page > lastPage) {
+      throw RangeError.range(page, 1, lastPage, 'page');
+    }
+
+    final rows =
+        await (_database.select(_database.orderRecords)
+              ..where((table) => table.ownerUserId.equals(lease.ownerUserId))
+              ..orderBy([
+                (table) => OrderingTerm.desc(table.createdAt),
+                (table) => OrderingTerm.desc(table.id),
+              ])
+              ..limit(perPage, offset: (page - 1) * perPage))
+            .get();
+    lease.ensureCurrent();
+    final orders = <OrderModel>[];
+    for (final row in rows) {
+      final itemRows = await (_database.select(
+        _database.orderItemRecords,
+      )..where((table) => table.orderId.equals(row.id))).get();
+      lease.ensureCurrent();
+      orders.add(
+        OrderModel(
+          id: row.id,
+          status: row.status,
+          aggregateStatus: row.aggregateStatus,
+          items: itemRows.map(_itemRecordToModel).toList(growable: false),
+          createdAt: row.createdAt.toUtc(),
+          notes: row.notes,
+        ),
+      );
+    }
+    lease.ensureCurrent();
+    return OrdersPageSlice<OrderModel>(
+      items: List<OrderModel>.unmodifiable(orders),
+      page: page,
+      lastPage: lastPage,
+      total: total,
+    );
+  }
+
+  /// Only local orders with durable create operations are added to remote page 1.
+  Future<List<OrderModel>> getPendingCreateOrders() async {
+    final lease = _sessionFence.capture();
+    final pending =
+        await (_database.select(_database.syncOperations)..where(
+              (table) =>
+                  table.entityType.equals('order') &
+                  table.operation.equals('create') &
+                  table.ownerUserId.equals(lease.ownerUserId),
+            ))
+            .get();
+    lease.ensureCurrent();
+    final ids = pending.map((operation) => operation.entityId).toSet();
+    if (ids.isEmpty) return const <OrderModel>[];
+    final rows =
+        await (_database.select(_database.orderRecords)..where(
+              (table) =>
+                  table.ownerUserId.equals(lease.ownerUserId) &
+                  table.id.isIn(ids),
+            ))
+            .get();
+    lease.ensureCurrent();
+    final orders = <OrderModel>[];
+    for (final row in rows) {
+      final itemRows = await (_database.select(
+        _database.orderItemRecords,
+      )..where((table) => table.orderId.equals(row.id))).get();
+      lease.ensureCurrent();
+      orders.add(
+        OrderModel(
+          id: row.id,
+          status: row.status,
+          aggregateStatus: row.aggregateStatus,
+          items: itemRows.map(_itemRecordToModel).toList(growable: false),
+          createdAt: row.createdAt.toUtc(),
+          notes: row.notes,
+        ),
+      );
+    }
+    orders.sort((a, b) => b.createdAt.compareTo(a.createdAt));
     lease.ensureCurrent();
     return List<OrderModel>.unmodifiable(orders);
   }
