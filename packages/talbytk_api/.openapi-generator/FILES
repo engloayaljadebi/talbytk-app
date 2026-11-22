@@ -51,6 +51,8 @@ doc/NotificationUnreadCount200ResponseData.md
 doc/OrderAggregateStatus.md
 doc/OrderApi.md
 doc/OrderIndex200Response.md
+doc/OrderIndex200ResponseAnyOf.md
+doc/OrderIndex200ResponseAnyOf1.md
 doc/OrderItemResource.md
 doc/OrderRecipientItemResource.md
 doc/OrderRecipientItemResponseResource.md
@@ -177,6 +179,8 @@ lib/src/model/notification_unread_count200_response.dart
 lib/src/model/notification_unread_count200_response_data.dart
 lib/src/model/order_aggregate_status.dart
 lib/src/model/order_index200_response.dart
+lib/src/model/order_index200_response_any_of.dart
+lib/src/model/order_index200_response_any_of1.dart
 lib/src/model/order_item_resource.dart
 lib/src/model/order_recipient_item_resource.dart
 lib/src/model/order_recipient_item_response_resource.dart
@@ -231,3 +235,5 @@ lib/src/model/user_resource_contacts_inner.dart
 lib/src/serializers.dart
 lib/talbytk_api.dart
 pubspec.yaml
+test/order_index200_response_any_of1_test.dart
+test/order_index200_response_any_of_test.dart

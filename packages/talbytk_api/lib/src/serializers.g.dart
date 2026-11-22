@@ -61,6 +61,8 @@ Serializers _$serializers = (Serializers().toBuilder()
       ..add(NotificationUnreadCount200ResponseData.serializer)
       ..add(OrderAggregateStatus.serializer)
       ..add(OrderIndex200Response.serializer)
+      ..add(OrderIndex200ResponseAnyOf.serializer)
+      ..add(OrderIndex200ResponseAnyOf1.serializer)
       ..add(OrderItemResource.serializer)
       ..add(OrderRecipientItemResource.serializer)
       ..add(OrderRecipientItemResponseResource.serializer)
@@ -160,6 +162,9 @@ Serializers _$serializers = (Serializers().toBuilder()
           const FullType(
               BuiltList, const [const FullType(OrderRecipientResource)]),
           () => ListBuilder<OrderRecipientResource>())
+      ..addBuilderFactory(
+          const FullType(BuiltList, const [const FullType(OrderResource)]),
+          () => ListBuilder<OrderResource>())
       ..addBuilderFactory(
           const FullType(BuiltList, const [const FullType(OrderResource)]),
           () => ListBuilder<OrderResource>())

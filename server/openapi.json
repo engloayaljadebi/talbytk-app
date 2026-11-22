@@ -7,7 +7,7 @@
     },
     "servers": [
         {
-            "url": "http://localhost/api/v1"
+            "url": "http://127.0.0.1:8000/api/v1"
         }
     ],
     "security": [
@@ -1845,27 +1845,185 @@
                 "tags": [
                     "Order"
                 ],
+                "parameters": [
+                    {
+                        "name": "page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1
+                        }
+                    },
+                    {
+                        "name": "per_page",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer",
+                            "minimum": 1,
+                            "maximum": 100
+                        }
+                    }
+                ],
                 "responses": {
                     "200": {
-                        "description": "Array of `OrderResource`",
+                        "description": "Array of `OrderResource`\n\nPaginated set of `OrderResource`",
                         "content": {
                             "application/json": {
                                 "schema": {
-                                    "type": "object",
-                                    "properties": {
-                                        "data": {
-                                            "type": "array",
-                                            "items": {
-                                                "$ref": "#/components/schemas/OrderResource"
-                                            }
+                                    "anyOf": [
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/OrderResource"
+                                                    }
+                                                }
+                                            },
+                                            "required": [
+                                                "data"
+                                            ]
+                                        },
+                                        {
+                                            "type": "object",
+                                            "properties": {
+                                                "data": {
+                                                    "type": "array",
+                                                    "items": {
+                                                        "$ref": "#/components/schemas/OrderResource"
+                                                    }
+                                                },
+                                                "links": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "first": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "last": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "prev": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        },
+                                                        "next": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ]
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "first",
+                                                        "last",
+                                                        "prev",
+                                                        "next"
+                                                    ]
+                                                },
+                                                "meta": {
+                                                    "type": "object",
+                                                    "properties": {
+                                                        "current_page": {
+                                                            "type": "integer",
+                                                            "minimum": 1
+                                                        },
+                                                        "from": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ],
+                                                            "minimum": 1
+                                                        },
+                                                        "last_page": {
+                                                            "type": "integer",
+                                                            "minimum": 1
+                                                        },
+                                                        "links": {
+                                                            "type": "array",
+                                                            "description": "Generated paginator links.",
+                                                            "items": {
+                                                                "type": "object",
+                                                                "properties": {
+                                                                    "url": {
+                                                                        "type": [
+                                                                            "string",
+                                                                            "null"
+                                                                        ]
+                                                                    },
+                                                                    "label": {
+                                                                        "type": "string"
+                                                                    },
+                                                                    "active": {
+                                                                        "type": "boolean"
+                                                                    }
+                                                                },
+                                                                "required": [
+                                                                    "url",
+                                                                    "label",
+                                                                    "active"
+                                                                ]
+                                                            }
+                                                        },
+                                                        "path": {
+                                                            "type": [
+                                                                "string",
+                                                                "null"
+                                                            ],
+                                                            "description": "Base path for paginator generated URLs."
+                                                        },
+                                                        "per_page": {
+                                                            "type": "integer",
+                                                            "description": "Number of items shown per page.",
+                                                            "minimum": 0
+                                                        },
+                                                        "to": {
+                                                            "type": [
+                                                                "integer",
+                                                                "null"
+                                                            ],
+                                                            "description": "Number of the last item in the slice.",
+                                                            "minimum": 1
+                                                        },
+                                                        "total": {
+                                                            "type": "integer",
+                                                            "description": "Total number of items being paginated.",
+                                                            "minimum": 0
+                                                        }
+                                                    },
+                                                    "required": [
+                                                        "current_page",
+                                                        "from",
+                                                        "last_page",
+                                                        "links",
+                                                        "path",
+                                                        "per_page",
+                                                        "to",
+                                                        "total"
+                                                    ]
+                                                }
+                                            },
+                                            "required": [
+                                                "data",
+                                                "links",
+                                                "meta"
+                                            ]
                                         }
-                                    },
-                                    "required": [
-                                        "data"
                                     ]
                                 }
                             }
                         }
+                    },
+                    "422": {
+                        "$ref": "#/components/responses/ValidationException"
                     },
                     "401": {
                         "$ref": "#/components/responses/AuthenticationException"

@@ -25,7 +25,7 @@ import 'package:talbytk_api/src/api/supplier_order_fulfillment_api.dart';
 import 'package:talbytk_api/src/api/supplier_order_response_api.dart';
 
 class TalbytkApi {
-  static const String basePath = r'http://localhost/api/v1';
+  static const String basePath = r'http://127.0.0.1:8000/api/v1';
 
   final Dio dio;
   final Serializers serializers;

@@ -8,13 +8,13 @@ part of 'order_index200_response.dart';
 
 class _$OrderIndex200Response extends OrderIndex200Response {
   @override
-  final BuiltList<OrderResource> data;
+  final AnyOf anyOf;
 
   factory _$OrderIndex200Response(
           [void Function(OrderIndex200ResponseBuilder)? updates]) =>
       (OrderIndex200ResponseBuilder()..update(updates))._build();
 
-  _$OrderIndex200Response._({required this.data}) : super._();
+  _$OrderIndex200Response._({required this.anyOf}) : super._();
   @override
   OrderIndex200Response rebuild(
           void Function(OrderIndex200ResponseBuilder) updates) =>
@@ -27,13 +27,13 @@ class _$OrderIndex200Response extends OrderIndex200Response {
   @override
   bool operator ==(Object other) {
     if (identical(other, this)) return true;
-    return other is OrderIndex200Response && data == other.data;
+    return other is OrderIndex200Response && anyOf == other.anyOf;
   }
 
   @override
   int get hashCode {
     var _$hash = 0;
-    _$hash = $jc(_$hash, data.hashCode);
+    _$hash = $jc(_$hash, anyOf.hashCode);
     _$hash = $jf(_$hash);
     return _$hash;
   }
@@ -41,7 +41,7 @@ class _$OrderIndex200Response extends OrderIndex200Response {
   @override
   String toString() {
     return (newBuiltValueToStringHelper(r'OrderIndex200Response')
-          ..add('data', data))
+          ..add('anyOf', anyOf))
         .toString();
   }
 }
@@ -50,10 +50,9 @@ class OrderIndex200ResponseBuilder
     implements Builder<OrderIndex200Response, OrderIndex200ResponseBuilder> {
   _$OrderIndex200Response? _$v;
 
-  ListBuilder<OrderResource>? _data;
-  ListBuilder<OrderResource> get data =>
-      _$this._data ??= ListBuilder<OrderResource>();
-  set data(ListBuilder<OrderResource>? data) => _$this._data = data;
+  AnyOf? _anyOf;
+  AnyOf? get anyOf => _$this._anyOf;
+  set anyOf(AnyOf? anyOf) => _$this._anyOf = anyOf;
 
   OrderIndex200ResponseBuilder() {
     OrderIndex200Response._defaults(this);
@@ -62,7 +61,7 @@ class OrderIndex200ResponseBuilder
   OrderIndex200ResponseBuilder get _$this {
     final $v = _$v;
     if ($v != null) {
-      _data = $v.data.toBuilder();
+      _anyOf = $v.anyOf;
       _$v = null;
     }
     return this;
@@ -82,23 +81,11 @@ class OrderIndex200ResponseBuilder
   OrderIndex200Response build() => _build();
 
   _$OrderIndex200Response _build() {
-    _$OrderIndex200Response _$result;
-    try {
-      _$result = _$v ??
-          _$OrderIndex200Response._(
-            data: data.build(),
-          );
-    } catch (_) {
-      late String _$failedField;
-      try {
-        _$failedField = 'data';
-        data.build();
-      } catch (e) {
-        throw BuiltValueNestedFieldError(
-            r'OrderIndex200Response', _$failedField, e.toString());
-      }
-      rethrow;
-    }
+    final _$result = _$v ??
+        _$OrderIndex200Response._(
+          anyOf: BuiltValueNullFieldError.checkNotNull(
+              anyOf, r'OrderIndex200Response', 'anyOf'),
+        );
     replace(_$result);
     return _$result;
   }

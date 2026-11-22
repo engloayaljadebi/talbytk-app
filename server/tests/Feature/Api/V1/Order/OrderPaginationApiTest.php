@@ -80,7 +80,7 @@ class OrderPaginationApiTest extends TestCase
             '?per_page=abc',
         ] as $query) {
             $this
-                ->getJson('/api/v1/orders' . $query)
+                ->getJson('/api/v1/orders'.$query)
                 ->assertUnprocessable();
         }
     }
