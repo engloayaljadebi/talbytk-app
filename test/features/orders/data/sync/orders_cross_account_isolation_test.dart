@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:talbytk/features/auth/domain/entities/auth_entity.dart';
@@ -99,6 +101,66 @@ void main() {
         reason: 'The queued order must be preserved for its owner.',
       );
     });
+    test(
+      'in-flight response after account switch cannot reconcile A as B',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        AuthSessionEntity? active = _session('account-A');
+        final fence = AccountSessionFence(() => active);
+        final local = OrdersLocalDataSource(database, sessionFence: fence);
+        final queued = await local.createOrder(_sampleOrderRequest());
+        final remote = _DelayedAccountRemote();
+        final coordinator = OrdersSyncCoordinator(
+          sessionFence: fence,
+          database: database,
+          localDataSource: local,
+          remoteDataSource: remote,
+        );
+
+        final running = coordinator.syncPendingOrders();
+        await remote.requestStarted.future;
+        active = _session('account-B');
+        remote.finish.complete(
+          OrderModel(
+            id: 'server-order-A',
+            status: 'pending',
+            createdAt: DateTime.utc(2026, 11, 23),
+            items: queued.items,
+          ),
+        );
+        await running; // Switching accounts is a safe stop, not an uncaught error.
+
+        final rows = await database.select(database.orderRecords).get();
+        final operations = await database.select(database.syncOperations).get();
+        expect(rows, hasLength(1));
+        expect(rows.single.id, queued.id);
+        expect(rows.single.ownerUserId, 'account-A');
+        expect(operations, hasLength(1));
+        expect(operations.single.ownerUserId, 'account-A');
+        expect(operations.single.status, SyncOperationStatuses.pending);
+        expect(operations.single.attempts, 0);
+        expect(await local.getOrders(), isEmpty); // B cannot read A's order.
+
+        // A can still resume the same durable logical request after sign-in.
+        active = _session('account-A');
+        final resumed = OrdersSyncCoordinator(
+          sessionFence: fence,
+          database: database,
+          localDataSource: local,
+          remoteDataSource: _RecordingAccountRemote(
+            authenticatedAccountId: 'account-A',
+          ),
+        );
+        await resumed.syncPendingOrders();
+        expect(await database.select(database.syncOperations).get(), isEmpty);
+        expect(
+          (await local.getOrders()).single.id,
+          'server-order-created-as-account-A',
+        );
+      },
+    );
+
     test('legacy unowned Outbox must not be sent under account A', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -154,6 +216,31 @@ void main() {
     });
   });
 }
+
+final class _DelayedAccountRemote implements OrdersDataSource {
+  final Completer<void> requestStarted = Completer<void>();
+  final Completer<OrderModel> finish = Completer<OrderModel>();
+
+  @override
+  Future<OrderModel> createOrder(CreateOrderModel request) {
+    requestStarted.complete();
+    return finish.future;
+  }
+
+  @override
+  Future<List<OrderModel>> getOrders() => Future.value(const <OrderModel>[]);
+}
+
+AuthSessionEntity _session(String accountId) => AuthSessionEntity(
+  user: AuthUserEntity(
+    id: accountId,
+    username: 'security-test-user',
+    displayName: 'Security Test User',
+    status: 'active',
+    lastLoginAt: null,
+    contacts: const <AuthContactEntity>[],
+  ),
+);
 
 AccountSessionFence _accountFence(String accountId) {
   final session = AuthSessionEntity(

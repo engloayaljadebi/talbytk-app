@@ -358,59 +358,141 @@ void main() {
       expect(remote.createCalls, 1);
       expect(secondOperation.attempts, 1);
     });
-    test('stops the batch on HTTP 401 and keeps queued orders', () async {
-      final database = AppDatabase.forTesting(NativeDatabase.memory());
-      addTearDown(database.close);
+    test(
+      'stops on HTTP 401 and backs off without deleting queued orders',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
 
-      final sessionFence = createLegacyOrderTestFence();
-      final local = OrdersLocalDataSource(database, sessionFence: sessionFence);
+        final sessionFence = createLegacyOrderTestFence();
+        final local = OrdersLocalDataSource(
+          database,
+          sessionFence: sessionFence,
+        );
 
-      for (final note in ['First queued order', 'Second queued order']) {
-        await local.createOrder(
-          CreateOrderModel(
-            supplierIds: const ['supplier-1'],
-            notes: note,
-            items: const [
-              OrderItemModel(
-                productId: 'product-1',
-                productName: 'Product 1',
-                unitPrice: 100,
-                quantity: 1,
-                supplierId: 'supplier-1',
-                supplierName: 'Supplier 1',
-              ),
-            ],
+        for (final note in ['First queued order', 'Second queued order']) {
+          await local.createOrder(
+            CreateOrderModel(
+              supplierIds: const ['supplier-1'],
+              notes: note,
+              items: const [
+                OrderItemModel(
+                  productId: 'product-1',
+                  productName: 'Product 1',
+                  unitPrice: 100,
+                  quantity: 1,
+                  supplierId: 'supplier-1',
+                  supplierName: 'Supplier 1',
+                ),
+              ],
+            ),
+          );
+        }
+
+        final before = await database.select(database.syncOperations).get();
+        expect(before, hasLength(2));
+
+        final requestOptions = RequestOptions(path: '/orders');
+        final remote = _FakeOrdersDataSource(
+          createError: DioException(
+            requestOptions: requestOptions,
+            response: Response<dynamic>(
+              requestOptions: requestOptions,
+              statusCode: 401,
+            ),
+            type: DioExceptionType.badResponse,
           ),
         );
-      }
 
-      final before = await database.select(database.syncOperations).get();
-      expect(before, hasLength(2));
+        final coordinator = OrdersSyncCoordinator(
+          sessionFence: sessionFence,
+          database: database,
+          localDataSource: local,
+          remoteDataSource: remote,
+        );
 
-      final requestOptions = RequestOptions(path: '/orders');
+        await coordinator.syncPendingOrders();
+
+        expect(remote.createCalls, 1);
+        final after = await database.select(database.syncOperations).get();
+        expect(after, hasLength(2));
+        final orderedBefore = [...before]
+          ..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        final first = after.singleWhere(
+          (op) => op.id == orderedBefore.first.id,
+        );
+        final second = after.singleWhere(
+          (op) => op.id == orderedBefore.last.id,
+        );
+        expect(first.status, SyncOperationStatuses.retrying);
+        expect(first.attempts, 1);
+        expect(first.nextAttemptAt, isNotNull);
+        expect(first.lastError, isNotNull);
+        expect(second.status, SyncOperationStatuses.pending);
+        expect(second.attempts, 0);
+        expect((await local.getOrders()), hasLength(2));
+      },
+    );
+
+    test('HTTP 429 honors Retry-After and does not retry early', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+      final fence = createLegacyOrderTestFence();
+      final local = OrdersLocalDataSource(database, sessionFence: fence);
+      final order = await local.createOrder(
+        CreateOrderModel(
+          supplierIds: const ['supplier-1'],
+          items: const [
+            OrderItemModel(
+              productId: 'product-1',
+              productName: 'Product 1',
+              unitPrice: 100,
+              quantity: 1,
+              supplierId: 'supplier-1',
+              supplierName: 'Supplier 1',
+            ),
+          ],
+        ),
+      );
+      final request = RequestOptions(path: '/orders');
       final remote = _FakeOrdersDataSource(
         createError: DioException(
-          requestOptions: requestOptions,
+          requestOptions: request,
           response: Response<dynamic>(
-            requestOptions: requestOptions,
-            statusCode: 401,
+            requestOptions: request,
+            statusCode: 429,
+            headers: Headers.fromMap({
+              'retry-after': ['120'],
+            }),
           ),
           type: DioExceptionType.badResponse,
         ),
       );
-
       final coordinator = OrdersSyncCoordinator(
-        sessionFence: sessionFence,
+        sessionFence: fence,
         database: database,
         localDataSource: local,
         remoteDataSource: remote,
       );
 
+      final before = DateTime.now().toUtc();
       await coordinator.syncPendingOrders();
-
+      final operation = await database
+          .select(database.syncOperations)
+          .getSingle();
+      expect(operation.entityId, order.id);
+      expect(operation.status, SyncOperationStatuses.retrying);
+      expect(operation.attempts, 1);
+      expect(
+        operation.nextAttemptAt!.isBefore(
+          before.add(const Duration(seconds: 120)),
+        ),
+        isFalse,
+      );
+      expect(await coordinator.hasDuePendingOrders(), isFalse);
+      await coordinator.syncPendingOrders();
       expect(remote.createCalls, 1);
-      final after = await database.select(database.syncOperations).get();
-      expect(after, unorderedEquals(before));
+      expect((await local.getOrders()).single.id, order.id);
     });
 
     test('keeps HTTP 503 retryable with backoff', () async {
@@ -646,6 +728,77 @@ void main() {
         expect(remote.createCalls, 1);
       },
     );
+    test(
+      'recovers after one failed local reconciliation without a second server order',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final fence = createLegacyOrderTestFence();
+        final local = _FailOnceCompleteCreateSyncLocalDataSource(
+          database,
+          sessionFence: fence,
+        );
+        final queued = await local.createOrder(
+          CreateOrderModel(
+            supplierIds: const ['supplier-1'],
+            items: const [
+              OrderItemModel(
+                productId: 'product-1',
+                productName: 'Product 1',
+                unitPrice: 100,
+                quantity: 1,
+                supplierId: 'supplier-1',
+                supplierName: 'Supplier 1',
+              ),
+            ],
+          ),
+        );
+        final remote = _FakeOrdersDataSource(
+          createdOrder: OrderModel(
+            id: 'server-order-recovered',
+            status: 'pending',
+            createdAt: DateTime.utc(2026, 8, 26),
+            items: queued.items,
+          ),
+        );
+        final coordinator = OrdersSyncCoordinator(
+          sessionFence: fence,
+          database: database,
+          localDataSource: local,
+          remoteDataSource: remote,
+        );
+
+        await coordinator.syncPendingOrders();
+        final pending = await database
+            .select(database.syncOperations)
+            .getSingle();
+        expect(pending.status, SyncOperationStatuses.retrying);
+        expect(pending.attempts, 1);
+        expect((await local.getOrders()).single.id, queued.id);
+
+        // Simulate the next eligible retry without waiting for real time.
+        await (database.update(
+          database.syncOperations,
+        )..where((table) => table.id.equals(pending.id))).write(
+          SyncOperationsCompanion(
+            nextAttemptAt: Value(
+              DateTime.now().toUtc().subtract(const Duration(seconds: 1)),
+            ),
+          ),
+        );
+        await coordinator.syncPendingOrders();
+        expect(remote.createCalls, 2);
+        expect(remote.requestKeys, hasLength(2));
+        expect(
+          remote.requestKeys.toSet(),
+          hasLength(1),
+        ); // Same logical request.
+        expect(await database.select(database.syncOperations).get(), isEmpty);
+        final recovered = await local.getOrders();
+        expect(recovered, hasLength(1));
+        expect(recovered.single.id, 'server-order-recovered');
+      },
+    );
   });
 }
 
@@ -656,10 +809,12 @@ class _FakeOrdersDataSource implements OrdersDataSource {
   final Object? createError;
 
   int createCalls = 0;
+  final List<String> requestKeys = <String>[];
 
   @override
   Future<OrderModel> createOrder(CreateOrderModel request) async {
     createCalls++;
+    requestKeys.add(request.idempotencyKey);
 
     final Object? error = createError;
 
@@ -679,6 +834,33 @@ class _FakeOrdersDataSource implements OrdersDataSource {
   @override
   Future<List<OrderModel>> getOrders() {
     throw UnsupportedError('Not used.');
+  }
+}
+
+final class _FailOnceCompleteCreateSyncLocalDataSource
+    extends OrdersLocalDataSource {
+  _FailOnceCompleteCreateSyncLocalDataSource(
+    super.database, {
+    required super.sessionFence,
+  });
+
+  bool _failNext = true;
+
+  @override
+  Future<OrderModel> completeCreateSync({
+    required String localOrderId,
+    required String operationId,
+    required OrderModel remoteOrder,
+  }) {
+    if (_failNext) {
+      _failNext = false;
+      throw StateError('Simulated one-time local reconciliation failure');
+    }
+    return super.completeCreateSync(
+      localOrderId: localOrderId,
+      operationId: operationId,
+      remoteOrder: remoteOrder,
+    );
   }
 }
 

@@ -11,6 +11,7 @@ import '../datasources/orders_datasource.dart';
 import '../datasources/remote/orders_remote_datasource.dart';
 import '../mappers/orders_mapper.dart';
 import '../models/orders_model.dart';
+import '../sync/order_retry_policy.dart';
 import 'package:uuid/uuid.dart';
 
 class OrdersRepositoryImpl
@@ -242,13 +243,39 @@ class OrdersRepositoryImpl
       lease.ensureCurrent();
 
       if (_shouldRemainQueued(error)) {
+        // The first foreground attempt is also subject to Retry-After.
+        // Otherwise the periodic outbox worker could immediately retry a 429.
+        if (error is DioException &&
+            (error.response?.statusCode == 429 ||
+                error.response?.statusCode == 503)) {
+          try {
+            await localDataSource.markCreateSyncRetry(
+              operationId: operationId,
+              attempts: 1,
+              error: error,
+              nextAttemptAt: OrderRetryPolicy.nextAttemptAt(
+                error: error,
+                attempts: 1,
+              ),
+            );
+          } catch (_) {
+            // The durable pending operation already exists. A failed retry
+            // metadata update must not lose it or hide a session switch.
+            lease.ensureCurrent();
+          }
+          lease.ensureCurrent();
+        }
         return OrdersMapper.toEntity(localOrder);
       }
 
       if (_isDefinitiveRemoteRejection(error)) {
-        await localDataSource.discardPendingCreate(
-          localOrderId: localOrder.id,
+        // A rejected request is not an offline success, but deleting the
+        // durable draft loses the customer's items and recipient selection.
+        // Keep the Outbox as a non-retryable dead letter for inspection.
+        await localDataSource.markCreateSyncPermanentFailure(
           operationId: operationId,
+          attempts: 1,
+          error: error,
         );
 
         lease.ensureCurrent();
