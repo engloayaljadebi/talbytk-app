@@ -235,5 +235,3 @@ lib/src/model/user_resource_contacts_inner.dart
 lib/src/serializers.dart
 lib/talbytk_api.dart
 pubspec.yaml
-test/order_index200_response_any_of1_test.dart
-test/order_index200_response_any_of_test.dart

@@ -5,7 +5,7 @@
 import 'package:talbytk_api/api.dart';
 ```
 
-All URIs are relative to *http://127.0.0.1:8000/api/v1*
+All URIs are relative to *http://localhost/api/v1*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
