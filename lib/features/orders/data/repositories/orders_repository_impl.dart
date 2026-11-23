@@ -326,8 +326,11 @@ class OrdersRepositoryImpl
       return false;
     }
 
+    // Authentication expiry is not a definitive rejection of the order.
+    // Preserve its durable Outbox operation for replay after re-authentication.
     return statusCode >= 400 &&
         statusCode < 500 &&
+        statusCode != 401 &&
         statusCode != 408 &&
         statusCode != 429;
   }

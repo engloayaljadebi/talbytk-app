@@ -7,6 +7,8 @@ import '../../../received_orders/presentation/pages/received_orders_page.dart';
 import '../../domain/entities/orders_entity.dart';
 import '../extensions/order_status_presentation.dart';
 import '../providers/orders_provider.dart';
+import '../providers/order_delivery_status_provider.dart';
+import '../widgets/order_delivery_badge.dart';
 import '../widgets/order_card_surface.dart';
 import 'order_details_page.dart';
 
@@ -44,6 +46,7 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
   Widget build(BuildContext context) {
     final controller = ref.watch(ordersProvider);
     final state = controller.state;
+    final deliveryOperations = ref.watch(orderDeliveryOperationsProvider);
     final theme = Theme.of(context);
     final colors = theme.colorScheme;
 
@@ -117,6 +120,10 @@ class _OrdersPageState extends ConsumerState<OrdersPage> {
                     constraints: const BoxConstraints(maxWidth: 680),
                     child: _OrderCard(
                       order: order,
+                      deliveryStatus: resolveOrderDeliveryStatus(
+                        order.id,
+                        deliveryOperations,
+                      ),
                       onTap: () {
                         Navigator.of(context).push(
                           MaterialPageRoute<void>(
@@ -362,9 +369,14 @@ class _ReceivedOrdersCenterTabState
 }
 
 class _OrderCard extends StatelessWidget {
-  const _OrderCard({required this.order, required this.onTap});
+  const _OrderCard({
+    required this.order,
+    required this.deliveryStatus,
+    required this.onTap,
+  });
 
   final OrderEntity order;
+  final OrderDeliveryStatus deliveryStatus;
   final VoidCallback onTap;
 
   @override
@@ -381,7 +393,11 @@ class _OrderCard extends StatelessWidget {
           child: Row(
             children: [
               Expanded(
-                child: _OrderTopSection(order: order, status: status),
+                child: _OrderTopSection(
+                  order: order,
+                  status: status,
+                  deliveryStatus: deliveryStatus,
+                ),
               ),
               const SizedBox(width: 12),
               DecoratedBox(
@@ -408,10 +424,15 @@ class _OrderCard extends StatelessWidget {
 }
 
 class _OrderTopSection extends StatelessWidget {
-  const _OrderTopSection({required this.order, required this.status});
+  const _OrderTopSection({
+    required this.order,
+    required this.status,
+    required this.deliveryStatus,
+  });
 
   final OrderEntity order;
   final OrderAggregateStatus status;
+  final OrderDeliveryStatus deliveryStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -433,7 +454,9 @@ class _OrderTopSection extends StatelessWidget {
           spacing: 12,
           runSpacing: 8,
           children: [
-            _OrderStatusBadge(status: status),
+            if (deliveryStatus == OrderDeliveryStatus.sent)
+              _OrderStatusBadge(status: status),
+            OrderDeliveryBadge(status: deliveryStatus),
             Text(
               _formatDate(order.createdAt),
               style: theme.textTheme.bodySmall?.copyWith(

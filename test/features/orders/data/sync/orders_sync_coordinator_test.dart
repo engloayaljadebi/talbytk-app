@@ -13,6 +13,75 @@ import '../../../../support/legacy_order_test_fence.dart';
 void main() {
   group('OrdersSyncCoordinator', () {
     test(
+      'due probe respects pending, retry backoff, and permanent failure',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+
+        final fence = createLegacyOrderTestFence();
+        final local = OrdersLocalDataSource(database, sessionFence: fence);
+        final coordinator = OrdersSyncCoordinator(
+          sessionFence: fence,
+          database: database,
+          localDataSource: local,
+          remoteDataSource: _FakeOrdersDataSource(),
+        );
+
+        expect(await coordinator.hasDuePendingOrders(), isFalse);
+
+        final localOrder = await local.createOrder(
+          CreateOrderModel(
+            supplierIds: const ['supplier-1'],
+            items: const [
+              OrderItemModel(
+                productId: 'product-1',
+                productName: 'Product 1',
+                unitPrice: 100,
+                quantity: 1,
+                supplierId: 'supplier-1',
+                supplierName: 'Supplier 1',
+              ),
+            ],
+          ),
+        );
+
+        expect(await coordinator.hasDuePendingOrders(), isTrue);
+
+        final query = database.update(database.syncOperations)
+          ..where((table) => table.entityId.equals(localOrder.id));
+        await query.write(
+          SyncOperationsCompanion(
+            status: const Value(SyncOperationStatuses.retrying),
+            nextAttemptAt: Value(
+              DateTime.now().toUtc().add(const Duration(hours: 1)),
+            ),
+          ),
+        );
+        expect(await coordinator.hasDuePendingOrders(), isFalse);
+
+        await (database.update(
+          database.syncOperations,
+        )..where((table) => table.entityId.equals(localOrder.id))).write(
+          SyncOperationsCompanion(
+            nextAttemptAt: Value(
+              DateTime.now().toUtc().subtract(const Duration(minutes: 1)),
+            ),
+          ),
+        );
+        expect(await coordinator.hasDuePendingOrders(), isTrue);
+
+        await (database.update(
+          database.syncOperations,
+        )..where((table) => table.entityId.equals(localOrder.id))).write(
+          const SyncOperationsCompanion(
+            status: Value(SyncOperationStatuses.permanentFailure),
+          ),
+        );
+        expect(await coordinator.hasDuePendingOrders(), isFalse);
+      },
+    );
+
+    test(
       'replays pending create and replaces local order with server order',
       () async {
         final database = AppDatabase.forTesting(NativeDatabase.memory());
@@ -294,10 +363,7 @@ void main() {
       addTearDown(database.close);
 
       final sessionFence = createLegacyOrderTestFence();
-      final local = OrdersLocalDataSource(
-        database,
-        sessionFence: sessionFence,
-      );
+      final local = OrdersLocalDataSource(database, sessionFence: sessionFence);
 
       for (final note in ['First queued order', 'Second queued order']) {
         await local.createOrder(

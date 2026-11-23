@@ -279,6 +279,61 @@ void main() {
         remoteDataSource.createRequest!.idempotencyKey,
       );
     });
+    test('preserves the local order and Outbox on HTTP 401', () async {
+      final database = AppDatabase.forTesting(NativeDatabase.memory());
+      addTearDown(database.close);
+
+      final fence = createLegacyOrderTestFence();
+      final local = OrdersLocalDataSource(database, sessionFence: fence);
+      final requestOptions = RequestOptions(path: '/orders');
+      final remoteError = DioException(
+        requestOptions: requestOptions,
+        response: Response<dynamic>(
+          requestOptions: requestOptions,
+          statusCode: 401,
+        ),
+        type: DioExceptionType.badResponse,
+      );
+      final remote = _FakeRemoteOrdersDataSource(createError: remoteError);
+      final repository = OrdersRepositoryImpl(
+        local,
+        sessionFence: fence,
+        remoteDataSource: remote,
+      );
+
+      await expectLater(
+        repository.createOrder(
+          CreateOrderRequest(
+            supplierIds: const ['supplier-1'],
+            items: const [
+              OrderItemEntity(
+                productId: 'product-1',
+                productName: 'Product 1',
+                unitPrice: 100,
+                quantity: 1,
+                supplierId: 'supplier-1',
+                supplierName: 'Supplier 1',
+              ),
+            ],
+          ),
+        ),
+        throwsA(same(remoteError)),
+      );
+
+      final orders = await local.getOrders();
+      final operations = await database.select(database.syncOperations).get();
+
+      expect(orders, hasLength(1));
+      expect(orders.single.id, startsWith('local-order-'));
+      expect(operations, hasLength(1));
+      expect(operations.single.entityId, orders.single.id);
+      expect(operations.single.status, SyncOperationStatuses.pending);
+      expect(operations.single.attempts, 0);
+      final payload =
+          jsonDecode(operations.single.payloadJson) as Map<String, dynamic>;
+      expect(payload['idempotencyKey'], remote.createRequest!.idempotencyKey);
+    });
+
     test('does not turn HTTP 422 into an offline order', () async {
       final AppDatabase database = AppDatabase.forTesting(
         NativeDatabase.memory(),

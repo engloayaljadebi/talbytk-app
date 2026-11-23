@@ -27,6 +27,36 @@ final class OrdersSyncCoordinator {
 
   bool _isSyncing = false;
 
+  /// Checks whether the signed-in account has a create operation eligible
+  /// for retry now. This does not contact the network or mutate the Outbox.
+  Future<bool> hasDuePendingOrders() async {
+    AccountSessionLease lease;
+    try {
+      lease = _sessionFence.capture();
+    } on StateError {
+      return false;
+    }
+
+    final now = DateTime.now().toUtc();
+    final operation =
+        await (_database.select(_database.syncOperations)
+              ..where(
+                (table) =>
+                    table.entityType.equals('order') &
+                    table.operation.equals('create') &
+                    table.ownerUserId.equals(lease.ownerUserId) &
+                    (table.status.equals(SyncOperationStatuses.pending) |
+                        table.status.equals(SyncOperationStatuses.retrying)) &
+                    (table.nextAttemptAt.isNull() |
+                        table.nextAttemptAt.isSmallerOrEqualValue(now)),
+              )
+              ..limit(1))
+            .getSingleOrNull();
+
+    lease.ensureCurrent();
+    return operation != null;
+  }
+
   Future<void> syncPendingOrders() async {
     if (_isSyncing) {
       return;
