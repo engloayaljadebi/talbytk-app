@@ -3,6 +3,7 @@
 namespace App\Actions\Order;
 
 use App\Enums\Order\AvailabilityStatus;
+use App\Models\Business;
 use App\Models\Order;
 use App\Models\OrderItemSelection;
 use App\Models\OrderRecipient;
@@ -220,6 +221,28 @@ class SelectOrderSupplierResponsesAction
                         !== ($desiredSnapshots[$recipientId] ?? []),
                 )
                 ->values();
+
+            $changedSupplierIds = $affectedRecipientIds
+                ->filter(static fn (string $id): bool => isset($desiredSnapshots[$id]))
+                ->map(static fn (string $id): string => (string) $recipients->get($id)->supplier_id)
+                ->unique()
+                ->values();
+
+            if ($changedSupplierIds->isNotEmpty()) {
+                // Serialize new commitments with supplier status changes.
+                $activeSupplierIds = Business::query()
+                    ->whereKey($changedSupplierIds->all())
+                    ->where('status', 'active')
+                    ->orderBy('id')
+                    ->sharedLock()
+                    ->pluck('id');
+
+                if ($activeSupplierIds->count() !== $changedSupplierIds->count()) {
+                    throw new ConflictHttpException(
+                        'A supplier that is no longer active cannot receive a new or changed selection.',
+                    );
+                }
+            }
 
             /*
              * Once physical fulfillment starts, the commercial quantity that the

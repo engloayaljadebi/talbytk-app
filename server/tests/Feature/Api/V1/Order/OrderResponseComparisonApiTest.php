@@ -13,6 +13,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\BuildsBusinessMarkets;
 use Tests\TestCase;
 
@@ -436,6 +437,41 @@ class OrderResponseComparisonApiTest extends TestCase
             1,
             (int) $order->fresh()->version,
         );
+    }
+
+    #[DataProvider('inactiveSupplierStatuses')]
+    public function test_buyer_cannot_make_a_new_selection_after_supplier_becomes_inactive(string $businessStatus): void
+    {
+        [$buyer, $member, $supplier, $order, $recipient, $recipientItem] = $this->fixture();
+
+        $responseItemId = $this->submitSupplierResponse(
+            $member,
+            $supplier,
+            $recipient,
+            $recipientItem->id,
+            status: 'full',
+            availableQuantity: 2,
+            offeredUnitPrice: '100.00',
+        );
+        $supplier->update(['status' => $businessStatus]);
+
+        $this->actAs($buyer);
+
+        $this->putJson(
+            $this->selectionEndpoint($order),
+            $this->selectionPayload($responseItemId, expectedVersion: 1, selectedQuantity: 1),
+        )->assertConflict();
+
+        $this->assertDatabaseCount('order_item_selections', 0);
+        $this->assertSame(1, (int) $order->fresh()->version);
+    }
+
+    public static function inactiveSupplierStatuses(): array
+    {
+        return [
+            'suspended business' => ['suspended'],
+            'closed business' => ['closed'],
+        ];
     }
 
     public function test_unavailable_supplier_response_cannot_be_selected(): void

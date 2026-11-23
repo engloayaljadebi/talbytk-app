@@ -8,10 +8,12 @@ use App\Models\Product;
 use App\Models\User;
 use App\Services\Order\OrderService;
 use Database\Seeders\BusinessCapabilitySeeder;
+use Database\Seeders\BusinessRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\BuildsBusinessMarkets;
 use Tests\TestCase;
 
@@ -31,9 +33,13 @@ class SupplierOrderResponseApiTest extends TestCase
         $this->seed(BusinessCapabilitySeeder::class);
     }
 
-    public function test_active_member_can_submit_full_and_partial_item_responses(): void
+    public function test_active_staff_can_submit_full_and_partial_item_responses(): void
     {
         [$member, $supplier, $recipient, $items] = $this->fixture(2);
+
+        $this->seed(BusinessRoleSeeder::class);
+        $supplier->memberships()->where('user_id', $member->id)
+            ->firstOrFail()->roles()->attach('staff', ['assigned_at' => now()]);
 
         Sanctum::actingAs($member);
 
@@ -83,6 +89,40 @@ class SupplierOrderResponseApiTest extends TestCase
             'availability_status' => 'partial',
             'offered_unit_price' => '88.00',
         ]);
+    }
+
+    #[DataProvider('supplierStatesThatPreventResponse')]
+    public function test_supplier_cannot_respond_when_not_eligible(string $businessStatus, bool $capabilityEnabled): void
+    {
+        [$member, $supplier, $recipient, $items] = $this->fixture();
+        $supplier->update(['status' => $businessStatus]);
+
+        if (! $capabilityEnabled) {
+            $supplier->capabilities()->updateExistingPivot('supplier', ['disabled_at' => now()]);
+        }
+
+        Sanctum::actingAs($member);
+
+        $this->withHeader('Idempotency-Key', self::IDEMPOTENCY_KEY)
+            ->postJson($this->endpoint($supplier, $recipient), [
+                'items' => [[
+                    'order_recipient_item_id' => $items[0]->id,
+                    'availability_status' => 'full',
+                    'available_quantity' => 2,
+                ]],
+            ])
+            ->assertForbidden();
+
+        $this->assertDatabaseCount('order_recipient_responses', 0);
+    }
+
+    public static function supplierStatesThatPreventResponse(): array
+    {
+        return [
+            'suspended supplier' => ['suspended', true],
+            'closed supplier' => ['closed', true],
+            'disabled capability' => ['active', false],
+        ];
     }
 
     public function test_offered_price_is_optional_independent_of_availability_status(): void

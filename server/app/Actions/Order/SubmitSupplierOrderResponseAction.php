@@ -7,6 +7,7 @@ use App\Events\Order\SupplierOrderResponseSubmitted;
 use App\Models\Business;
 use App\Models\OrderRecipient;
 use App\Models\OrderRecipientResponse;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -51,6 +52,15 @@ class SubmitSupplierOrderResponseAction
                 ])
                 ->lockForUpdate()
                 ->firstOrFail();
+
+            $currentBusiness = Business::query()
+                ->whereKey($business->id)
+                ->sharedLock()
+                ->firstOrFail();
+
+            if ($currentBusiness->status !== 'active') {
+                throw new AuthorizationException('The supplier business is not active.');
+            }
 
             $existingResponse = OrderRecipientResponse::query()
                 ->where('order_recipient_id', $recipient->id)
