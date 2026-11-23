@@ -38,6 +38,20 @@ class _MainPageState extends ConsumerState<MainPage>
   /// يمنع تشغيل أكثر من مزامنة للطلبات في الوقت نفسه.
   bool _isSyncingOrders = false;
 
+  // Poll only while the authenticated shell is in the foreground.
+  // No connectivity plugin is required: due operations are retried after
+  // nextAttemptAt, including when the network returns without app resume.
+  Timer? _orderRetryTimer;
+
+  void _startOrderRetryTimer() {
+    _orderRetryTimer?.cancel();
+    _orderRetryTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+      if (mounted) {
+        unawaited(_syncPendingOrders(onlyIfDue: true));
+      }
+    });
+  }
+
   bool _isSyncingProducts = false;
 
   bool _isRefreshingReceivedOrders = false;
@@ -47,6 +61,7 @@ class _MainPageState extends ConsumerState<MainPage>
     super.initState();
 
     WidgetsBinding.instance.addObserver(this);
+    _startOrderRetryTimer();
 
     // نبدأ المزامنة بعد بناء الـ authenticated shell لأول مرة.
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -59,6 +74,7 @@ class _MainPageState extends ConsumerState<MainPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _startOrderRetryTimer();
       final userId = ref.read(authProvider).state.user?.id;
 
       if (userId != null) {
@@ -68,12 +84,17 @@ class _MainPageState extends ConsumerState<MainPage>
       unawaited(_syncPendingOrders());
       unawaited(_syncPendingProducts());
       unawaited(_refreshReceivedOrders());
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      _orderRetryTimer?.cancel();
+      _orderRetryTimer = null;
     }
   }
 
   /// يرسل الطلبات الموجودة في Outbox إلى الخادم،
   /// ثم يعيد تحميل الطلبات المحلية بعد reconciliation.
-  Future<void> _syncPendingOrders() async {
+  Future<void> _syncPendingOrders({bool onlyIfDue = false}) async {
     if (_isSyncingOrders) {
       return;
     }
@@ -87,6 +108,14 @@ class _MainPageState extends ConsumerState<MainPage>
     final ordersController = ref.read(ordersProvider);
 
     try {
+      // Avoid a remote refresh every 30 seconds when the Outbox is empty
+      // or its next retry time has not arrived yet.
+      if (onlyIfDue) {
+        if (!await syncCoordinator.hasDuePendingOrders() || !mounted) {
+          return;
+        }
+      }
+
       await syncCoordinator.syncPendingOrders();
 
       if (!mounted) {
@@ -169,6 +198,7 @@ class _MainPageState extends ConsumerState<MainPage>
 
   @override
   void dispose() {
+    _orderRetryTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
 
     super.dispose();

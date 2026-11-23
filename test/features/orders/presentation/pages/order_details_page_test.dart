@@ -11,6 +11,7 @@ import 'package:talbytk/features/orders/domain/usecases/orders_usecase.dart';
 import 'package:talbytk/features/orders/presentation/controllers/orders_controller.dart';
 import 'package:talbytk/features/orders/presentation/pages/order_details_page.dart';
 import 'package:talbytk/features/orders/presentation/providers/orders_provider.dart';
+import 'package:talbytk/features/orders/presentation/providers/order_delivery_status_provider.dart';
 
 void main() {
   late _FakeOrdersRepository ordersRepository;
@@ -24,6 +25,9 @@ void main() {
   Widget createSubject({required OrderEntity order}) {
     return ProviderScope(
       overrides: [
+        orderDeliveryOperationsProvider.overrideWith(
+          (ref) => Stream.value(const {'local-order-1727829102000': 'pending'}),
+        ),
         ordersProvider.overrideWith(
           (ref) => OrdersController(
             OrdersUseCase(ordersRepository),
@@ -71,14 +75,11 @@ void main() {
       // التحقق من ظهور رسالة المزامنة باللغة العربية
       expect(
         find.text(
-          'الطلبية قيد المزامنة حالياً مع الخادم. ستكون ردود الموردين متاحة فور اكتمال المزامنة.',
+          'لم يتم تأكيد إرسال الطلبية إلى الخادم بعد. ستتوفر ردود الموردين بعد نجاح الإرسال.',
         ),
         findsOneWidget,
       );
-      expect(
-        find.text('جاري إرسال الطلبية إلى الخادم والموردين...'),
-        findsOneWidget,
-      );
+      expect(find.text('محفوظ محليًا — بانتظار الإرسال'), findsWidgets);
       expect(find.text('بانتظار اكتمال المزامنة'), findsOneWidget);
 
       // التحقق من أن الزر معطّل

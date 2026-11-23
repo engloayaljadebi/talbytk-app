@@ -27,6 +27,8 @@ import '../../../order_response_comparison/presentation/pages/order_response_com
 import '../../domain/entities/orders_entity.dart';
 import '../extensions/order_status_presentation.dart';
 import '../providers/orders_provider.dart';
+import '../providers/order_delivery_status_provider.dart';
+import '../widgets/order_delivery_badge.dart';
 
 /// صفحة التفاصيل الكاملة لطلبية واحدة.
 /// صفحة التفاصيل الكاملة لطلبية واحدة.
@@ -48,6 +50,10 @@ class OrderDetailsPage extends ConsumerWidget {
     final OrderEntity currentOrder =
         controller.findOrderById(order.id) ?? order;
     final bool isUnsyncedOrder = _isLocalUnsyncedOrderId(currentOrder.id);
+    final deliveryStatus = resolveOrderDeliveryStatus(
+      currentOrder.id,
+      ref.watch(orderDeliveryOperationsProvider),
+    );
 
     return Scaffold(
       backgroundColor: colors.surfaceContainerLowest,
@@ -78,14 +84,24 @@ class OrderDetailsPage extends ConsumerWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      _OrderHeaderCard(order: currentOrder),
+                      _OrderHeaderCard(
+                        order: currentOrder,
+                        deliveryStatus: deliveryStatus,
+                      ),
                       const SizedBox(height: 14),
 
-                      _OrderProgressCard(status: currentOrder.aggregateStatus),
+                      if (!isUnsyncedOrder)
+                        _OrderProgressCard(status: currentOrder.aggregateStatus)
+                      else
+                        _SectionCard(
+                          title: 'حالة الإرسال',
+                          child: OrderDeliveryBadge(status: deliveryStatus),
+                        ),
                       const SizedBox(height: 14),
 
                       _SupplierResponsesCard(
                         isSyncPending: isUnsyncedOrder,
+                        deliveryStatus: deliveryStatus,
                         onOpen: isUnsyncedOrder
                             ? null
                             : () async {
@@ -135,9 +151,10 @@ class OrderDetailsPage extends ConsumerWidget {
 }
 
 class _OrderHeaderCard extends StatelessWidget {
-  const _OrderHeaderCard({required this.order});
+  const _OrderHeaderCard({required this.order, required this.deliveryStatus});
 
   final OrderEntity order;
+  final OrderDeliveryStatus deliveryStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -192,7 +209,10 @@ class _OrderHeaderCard extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 12),
-                _StatusBadge(status: status),
+                if (deliveryStatus == OrderDeliveryStatus.sent)
+                  _StatusBadge(status: status)
+                else
+                  Flexible(child: OrderDeliveryBadge(status: deliveryStatus)),
               ],
             ),
             const SizedBox(height: 18),
@@ -561,10 +581,12 @@ class _SupplierResponsesCard extends StatelessWidget {
   const _SupplierResponsesCard({
     required this.onOpen,
     this.isSyncPending = false,
+    required this.deliveryStatus,
   });
 
   final VoidCallback? onOpen;
   final bool isSyncPending;
+  final OrderDeliveryStatus deliveryStatus;
 
   @override
   Widget build(BuildContext context) {
@@ -578,7 +600,9 @@ class _SupplierResponsesCard extends StatelessWidget {
         children: [
           Text(
             isSyncPending
-                ? 'الطلبية قيد المزامنة حالياً مع الخادم. ستكون ردود الموردين متاحة فور اكتمال المزامنة.'
+                ? deliveryStatus == OrderDeliveryStatus.failed
+                      ? 'تعذر إرسال الطلبية إلى الخادم. بياناتها محفوظة على الجهاز، ولن تظهر ردود الموردين قبل معالجة مشكلة الإرسال.'
+                      : 'لم يتم تأكيد إرسال الطلبية إلى الخادم بعد. ستتوفر ردود الموردين بعد نجاح الإرسال.'
                 : 'راجع الكميات المتاحة والأسعار التي أرسلها الموردون، ثم اختر العرض المناسب لك.',
             style: theme.textTheme.bodyMedium?.copyWith(
               color: colors.onSurfaceVariant,
@@ -598,11 +622,19 @@ class _SupplierResponsesCard extends StatelessWidget {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.sync_rounded, size: 18, color: colors.primary),
+                  Icon(
+                    deliveryStatus == OrderDeliveryStatus.failed
+                        ? Icons.error_outline_rounded
+                        : Icons.sync_rounded,
+                    size: 18,
+                    color: deliveryStatus == OrderDeliveryStatus.failed
+                        ? colors.error
+                        : colors.primary,
+                  ),
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'جاري إرسال الطلبية إلى الخادم والموردين...',
+                      deliveryStatus.label,
                       style: theme.textTheme.bodySmall?.copyWith(
                         color: colors.onSurfaceVariant,
                         fontWeight: FontWeight.w600,
