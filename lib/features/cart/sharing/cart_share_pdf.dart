@@ -48,7 +48,7 @@ Future<Uint8List> buildCartSharePdf(CartShareData data) async {
       build: (_) => [
         pw.Align(
           alignment: pw.Alignment.centerRight,
-          child: _text('طلب عرض سعر', size: 22),
+          child: _text('اصناف الطلبية', size: 22),
         ),
         pw.Align(
           alignment: pw.Alignment.centerRight,
