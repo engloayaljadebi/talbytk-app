@@ -64,6 +64,10 @@ class BusinessPolicy
             return $readAccess;
         }
 
+        if ($business->status !== 'active') {
+            return Response::deny('The supplier business is not active.');
+        }
+
         // Historical read access never restores mutation permission.
         return $this->hasCurrentSupplierCapability($business)
             ? Response::allow()
@@ -81,6 +85,10 @@ class BusinessPolicy
 
         if ($readAccess->denied()) {
             return $readAccess;
+        }
+
+        if (! in_array($business->status, ['active', 'closed'], true)) {
+            return Response::deny('The supplier business is suspended.');
         }
 
         // Historical read access never restores mutation permission.

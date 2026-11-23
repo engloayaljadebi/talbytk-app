@@ -10,9 +10,11 @@ use App\Models\Product;
 use App\Models\User;
 use App\Services\Order\OrderService;
 use Database\Seeders\BusinessCapabilitySeeder;
+use Database\Seeders\BusinessRoleSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\Support\BuildsBusinessMarkets;
 use Tests\TestCase;
 
@@ -28,11 +30,17 @@ class SupplierOrderFulfillmentApiTest extends TestCase
         $this->seed(BusinessCapabilitySeeder::class);
     }
 
-    public function test_selected_supplier_can_start_fulfillment(): void
+    #[DataProvider('businessStatusesForFulfillment')]
+    public function test_staff_can_fulfill_a_selected_order(string $businessStatus): void
     {
         [$member, $supplier, $recipient] = $this->fixture(
             selected: true,
         );
+
+        $this->seed(BusinessRoleSeeder::class);
+        $supplier->memberships()->where('user_id', $member->id)
+            ->firstOrFail()->roles()->attach('staff', ['assigned_at' => now()]);
+        $supplier->update(['status' => $businessStatus]);
 
         Sanctum::actingAs($member);
 
@@ -78,11 +86,55 @@ class SupplierOrderFulfillmentApiTest extends TestCase
         );
     }
 
-    public function test_supplier_cannot_start_before_customer_selection(): void
+    public static function businessStatusesForFulfillment(): array
+    {
+        return [
+            'active business' => ['active'],
+            'closed business' => ['closed'],
+        ];
+    }
+
+    #[DataProvider('supplierStatesThatPreventFulfillment')]
+    public function test_supplier_cannot_fulfill_when_not_eligible(string $businessStatus, bool $capabilityEnabled): void
+    {
+        [$member, $supplier, $recipient] = $this->fixture(selected: true);
+        $supplier->update(['status' => $businessStatus]);
+
+        if (! $capabilityEnabled) {
+            $supplier->capabilities()->updateExistingPivot('supplier', ['disabled_at' => now()]);
+        }
+
+        Sanctum::actingAs($member);
+
+        $this->getJson("/api/v1/businesses/{$supplier->id}/received-orders")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $recipient->id);
+
+        $this->patchJson($this->endpoint($supplier, $recipient), [
+            'expected_version' => 1,
+            'status' => 'preparing',
+        ])->assertForbidden();
+
+        $this->assertDatabaseCount('order_recipient_fulfillment_histories', 0);
+        $this->assertNull($recipient->fresh()->fulfillment_status);
+    }
+
+    public static function supplierStatesThatPreventFulfillment(): array
+    {
+        return [
+            'suspended business' => ['suspended', true],
+            'closed business with disabled capability' => ['closed', false],
+        ];
+    }
+
+    #[DataProvider('businessStatusesForFulfillment')]
+    public function test_supplier_cannot_start_before_customer_selection(string $businessStatus): void
     {
         [$member, $supplier, $recipient] = $this->fixture(
             selected: false,
         );
+
+        $supplier->update(['status' => $businessStatus]);
 
         Sanctum::actingAs($member);
 

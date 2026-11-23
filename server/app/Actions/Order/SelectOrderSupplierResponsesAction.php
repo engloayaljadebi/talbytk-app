@@ -3,12 +3,14 @@
 namespace App\Actions\Order;
 
 use App\Enums\Order\AvailabilityStatus;
+use App\Models\Business;
 use App\Models\Order;
 use App\Models\OrderItemSelection;
 use App\Models\OrderRecipient;
 use App\Models\OrderRecipientItemResponse;
 use App\Models\User;
 use App\Services\Order\OrderResponseComparisonQueryService;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -220,6 +222,29 @@ class SelectOrderSupplierResponsesAction
                         !== ($desiredSnapshots[$recipientId] ?? []),
                 )
                 ->values();
+
+            $changedSupplierIds = $affectedRecipientIds
+                ->filter(static fn (string $id): bool => isset($desiredSnapshots[$id]))
+                ->map(static fn (string $id): string => (string) $recipients->get($id)->supplier_id)
+                ->unique()
+                ->values();
+
+            if ($changedSupplierIds->isNotEmpty()) {
+                // Serialize new commitments with supplier status changes.
+                $activeSupplierIds = Business::query()
+                    ->whereKey($changedSupplierIds->all())
+                    ->where('status', 'active')
+                    ->orderBy('id')
+                    ->sharedLock()
+                    ->pluck('id');
+
+                if ($activeSupplierIds->count() !== $changedSupplierIds->count()) {
+                    throw new HttpResponseException(response()->json([
+                        'code' => 'SUPPLIER_NOT_AVAILABLE_FOR_SELECTION',
+                        'message' => 'A supplier that is no longer active cannot receive a new or changed selection.',
+                    ], 409));
+                }
+            }
 
             /*
              * Once physical fulfillment starts, the commercial quantity that the

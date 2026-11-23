@@ -8,6 +8,7 @@ use App\Models\Business;
 use App\Models\OrderItemSelection;
 use App\Models\OrderRecipient;
 use App\Models\User;
+use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Support\Facades\DB;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
@@ -38,6 +39,15 @@ class UpdateSupplierFulfillmentAction
                 ->lockForUpdate()
                 ->firstOrFail();
 
+            $currentBusiness = Business::query()
+                ->whereKey($business->id)
+                ->sharedLock()
+                ->firstOrFail();
+
+            if (! in_array($currentBusiness->status, ['active', 'closed'], true)) {
+                throw new AuthorizationException('The supplier business is suspended.');
+            }
+
             $currentVersion = (int) $recipient->fulfillment_version;
             $expectedVersion = (int) $data['expected_version'];
 
@@ -61,15 +71,13 @@ class UpdateSupplierFulfillmentAction
 
             $currentStatus = $recipient->fulfillment_status;
 
-            if ($currentStatus === null) {
-                if (! $hasSelection) {
-                    throw new ConflictHttpException(
-                        'Supplier fulfillment cannot start before the customer selects this supplier.',
-                    );
-                }
-
-                $currentStatus = FulfillmentStatus::Confirmed;
+            if (! $hasSelection && ($currentStatus === null || $currentBusiness->status === 'closed')) {
+                throw new ConflictHttpException(
+                    'Supplier fulfillment requires a confirmed customer selection.',
+                );
             }
+
+            $currentStatus ??= FulfillmentStatus::Confirmed;
 
             $targetStatus = FulfillmentStatus::from(
                 (string) $data['status'],

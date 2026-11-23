@@ -12,6 +12,7 @@ import 'package:talbytk/core/network/generated_api_client.dart';
 import 'package:talbytk/features/order_response_comparison/data/datasources/remote/order_response_comparison_remote_datasource.dart';
 import 'package:talbytk/features/order_response_comparison/domain/entities/order_response_comparison_entity.dart';
 import 'package:talbytk/features/order_response_comparison/domain/errors/stale_order_version_exception.dart';
+import 'package:talbytk/features/order_response_comparison/domain/errors/supplier_not_available_for_selection_exception.dart';
 import '../../../../../support/legacy_order_test_fence.dart';
 
 void main() {
@@ -262,6 +263,32 @@ void main() {
         );
       },
     );
+
+    test('replaceSelections distinguishes an unavailable supplier', () async {
+      final requestFuture = server.first;
+      final result = expectLater(
+        dataSource.replaceSelections(
+          orderId: orderId,
+          expectedVersion: 1,
+          selections: const [
+            OrderResponseSelectionInput(
+              orderRecipientItemResponseId: responseItemId,
+              selectedQuantity: 1,
+            ),
+          ],
+        ),
+        throwsA(isA<SupplierNotAvailableForSelectionException>()),
+      );
+
+      final request = await requestFuture;
+      request.response.statusCode = HttpStatus.conflict;
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(
+        jsonEncode({'code': 'SUPPLIER_NOT_AVAILABLE_FOR_SELECTION'}),
+      );
+      await request.response.close();
+      await result;
+    });
   });
 }
 

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../domain/entities/order_response_comparison_entity.dart';
 import '../../domain/errors/stale_order_version_exception.dart';
+import '../../domain/errors/supplier_not_available_for_selection_exception.dart';
 import '../../domain/usecases/order_response_comparison_usecase.dart';
 import '../state/order_response_comparison_state.dart';
 
@@ -88,6 +89,13 @@ final class OrderResponseComparisonController extends ChangeNotifier {
 
       notifyListeners();
       return true;
+    } on SupplierNotAvailableForSelectionException {
+      state = state.copyWith(
+        isSubmitting: false,
+        errorMessage: 'لم يعد أحد الموردين المختارين متاحًا. اختر موردًا آخر.',
+      );
+      notifyListeners();
+      return false;
     } on StaleOrderVersionException {
       try {
         final fresh = await _useCase.getComparison(orderId: _orderId);

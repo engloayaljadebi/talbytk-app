@@ -5,6 +5,7 @@ import 'package:talbytk_api/talbytk_api.dart' as api;
 
 import '../../../domain/entities/order_response_comparison_entity.dart';
 import '../../../domain/errors/stale_order_version_exception.dart';
+import '../../../domain/errors/supplier_not_available_for_selection_exception.dart';
 
 abstract interface class OrderResponseComparisonRemoteDataSource {
   Future<api.OrderResponseComparisonResource> show({required String orderId});
@@ -127,6 +128,11 @@ final class OrderResponseComparisonRemoteDataSourceImpl
       _apiClient.ensureProtectedRequestAuthCurrent(authExtra);
 
       if (error.response?.statusCode == 409) {
+        final body = error.response?.data;
+        if (body is Map &&
+            body['code'] == 'SUPPLIER_NOT_AVAILABLE_FOR_SELECTION') {
+          throw const SupplierNotAvailableForSelectionException();
+        }
         throw const StaleOrderVersionException();
       }
 
