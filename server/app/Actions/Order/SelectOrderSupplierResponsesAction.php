@@ -10,6 +10,7 @@ use App\Models\OrderRecipient;
 use App\Models\OrderRecipientItemResponse;
 use App\Models\User;
 use App\Services\Order\OrderResponseComparisonQueryService;
+use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -238,9 +239,10 @@ class SelectOrderSupplierResponsesAction
                     ->pluck('id');
 
                 if ($activeSupplierIds->count() !== $changedSupplierIds->count()) {
-                    throw new ConflictHttpException(
-                        'A supplier that is no longer active cannot receive a new or changed selection.',
-                    );
+                    throw new HttpResponseException(response()->json([
+                        'code' => 'SUPPLIER_NOT_AVAILABLE_FOR_SELECTION',
+                        'message' => 'A supplier that is no longer active cannot receive a new or changed selection.',
+                    ], 409));
                 }
             }
 

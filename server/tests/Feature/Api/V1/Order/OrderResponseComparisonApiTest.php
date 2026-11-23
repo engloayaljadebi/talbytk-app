@@ -460,7 +460,8 @@ class OrderResponseComparisonApiTest extends TestCase
         $this->putJson(
             $this->selectionEndpoint($order),
             $this->selectionPayload($responseItemId, expectedVersion: 1, selectedQuantity: 1),
-        )->assertConflict();
+        )->assertConflict()
+            ->assertJsonPath('code', 'SUPPLIER_NOT_AVAILABLE_FOR_SELECTION');
 
         $this->assertDatabaseCount('order_item_selections', 0);
         $this->assertSame(1, (int) $order->fresh()->version);
