@@ -58,6 +58,8 @@ import 'package:talbytk_api/src/model/notification_unread_count200_response.dart
 import 'package:talbytk_api/src/model/notification_unread_count200_response_data.dart';
 import 'package:talbytk_api/src/model/order_aggregate_status.dart';
 import 'package:talbytk_api/src/model/order_index200_response.dart';
+import 'package:talbytk_api/src/model/order_index200_response_any_of.dart';
+import 'package:talbytk_api/src/model/order_index200_response_any_of1.dart';
 import 'package:talbytk_api/src/model/order_item_resource.dart';
 import 'package:talbytk_api/src/model/order_recipient_item_resource.dart';
 import 'package:talbytk_api/src/model/order_recipient_item_response_resource.dart';
@@ -157,6 +159,8 @@ part 'serializers.g.dart';
   NotificationUnreadCount200ResponseData,
   OrderAggregateStatus,
   OrderIndex200Response,
+  OrderIndex200ResponseAnyOf,
+  OrderIndex200ResponseAnyOf1,
   OrderItemResource,
   OrderRecipientItemResource,
   OrderRecipientItemResponseResource,

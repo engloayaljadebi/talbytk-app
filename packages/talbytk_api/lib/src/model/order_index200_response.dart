@@ -3,10 +3,15 @@
 //
 
 // ignore_for_file: unused_element
+import 'package:talbytk_api/src/model/product_index200_response_links.dart';
+import 'package:talbytk_api/src/model/order_index200_response_any_of1.dart';
 import 'package:built_collection/built_collection.dart';
+import 'package:talbytk_api/src/model/order_index200_response_any_of.dart';
 import 'package:talbytk_api/src/model/order_resource.dart';
+import 'package:talbytk_api/src/model/product_index200_response_meta.dart';
 import 'package:built_value/built_value.dart';
 import 'package:built_value/serializer.dart';
+import 'package:one_of/any_of.dart';
 
 part 'order_index200_response.g.dart';
 
@@ -14,10 +19,12 @@ part 'order_index200_response.g.dart';
 ///
 /// Properties:
 /// * [data] 
+/// * [links] 
+/// * [meta] 
 @BuiltValue()
 abstract class OrderIndex200Response implements Built<OrderIndex200Response, OrderIndex200ResponseBuilder> {
-  @BuiltValueField(wireName: r'data')
-  BuiltList<OrderResource> get data;
+  /// Any Of [OrderIndex200ResponseAnyOf], [OrderIndex200ResponseAnyOf1]
+  AnyOf get anyOf;
 
   OrderIndex200Response._();
 
@@ -42,11 +49,6 @@ class _$OrderIndex200ResponseSerializer implements PrimitiveSerializer<OrderInde
     OrderIndex200Response object, {
     FullType specifiedType = FullType.unspecified,
   }) sync* {
-    yield r'data';
-    yield serializers.serialize(
-      object.data,
-      specifiedType: const FullType(BuiltList, [FullType(OrderResource)]),
-    );
   }
 
   @override
@@ -55,34 +57,8 @@ class _$OrderIndex200ResponseSerializer implements PrimitiveSerializer<OrderInde
     OrderIndex200Response object, {
     FullType specifiedType = FullType.unspecified,
   }) {
-    return _serializeProperties(serializers, object, specifiedType: specifiedType).toList();
-  }
-
-  void _deserializeProperties(
-    Serializers serializers,
-    Object serialized, {
-    FullType specifiedType = FullType.unspecified,
-    required List<Object?> serializedList,
-    required OrderIndex200ResponseBuilder result,
-    required List<Object?> unhandled,
-  }) {
-    for (var i = 0; i < serializedList.length; i += 2) {
-      final key = serializedList[i] as String;
-      final value = serializedList[i + 1];
-      switch (key) {
-        case r'data':
-          final valueDes = serializers.deserialize(
-            value,
-            specifiedType: const FullType(BuiltList, [FullType(OrderResource)]),
-          ) as BuiltList<OrderResource>;
-          result.data.replace(valueDes);
-          break;
-        default:
-          unhandled.add(key);
-          unhandled.add(value);
-          break;
-      }
-    }
+    final anyOf = object.anyOf;
+    return serializers.serialize(anyOf, specifiedType: FullType(AnyOf, anyOf.valueTypes.map((type) => FullType(type)).toList()))!;
   }
 
   @override
@@ -92,16 +68,10 @@ class _$OrderIndex200ResponseSerializer implements PrimitiveSerializer<OrderInde
     FullType specifiedType = FullType.unspecified,
   }) {
     final result = OrderIndex200ResponseBuilder();
-    final serializedList = (serialized as Iterable<Object?>).toList();
-    final unhandled = <Object?>[];
-    _deserializeProperties(
-      serializers,
-      serialized,
-      specifiedType: specifiedType,
-      serializedList: serializedList,
-      unhandled: unhandled,
-      result: result,
-    );
+    Object? anyOfDataSrc;
+    final targetType = const FullType(AnyOf, [FullType(OrderIndex200ResponseAnyOf), FullType(OrderIndex200ResponseAnyOf1), ]);
+    anyOfDataSrc = serialized;
+    result.anyOf = serializers.deserialize(anyOfDataSrc, specifiedType: targetType) as AnyOf;
     return result.build();
   }
 }

@@ -14,7 +14,7 @@ Method | HTTP request | Description
 
 
 # **orderIndex**
-> OrderIndex200Response orderIndex()
+> OrderIndex200Response orderIndex(page, perPage)
 
 Return orders owned by the authenticated customer
 
@@ -23,9 +23,11 @@ Return orders owned by the authenticated customer
 import 'package:talbytk_api/api.dart';
 
 final api = TalbytkApi().getOrderApi();
+final int page = 56; // int | 
+final int perPage = 56; // int | 
 
 try {
-    final response = api.orderIndex();
+    final response = api.orderIndex(page, perPage);
     print(response);
 } on DioException catch (e) {
     print('Exception when calling OrderApi->orderIndex: $e\n');
@@ -33,7 +35,11 @@ try {
 ```
 
 ### Parameters
-This endpoint does not need any parameter.
+
+Name | Type | Description  | Notes
+------------- | ------------- | ------------- | -------------
+ **page** | **int**|  | [optional] 
+ **perPage** | **int**|  | [optional] 
 
 ### Return type
 

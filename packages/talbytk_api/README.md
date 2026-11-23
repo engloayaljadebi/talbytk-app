@@ -189,6 +189,8 @@ Class | Method | HTTP request | Description
  - [NotificationUnreadCount200ResponseData](doc/NotificationUnreadCount200ResponseData.md)
  - [OrderAggregateStatus](doc/OrderAggregateStatus.md)
  - [OrderIndex200Response](doc/OrderIndex200Response.md)
+ - [OrderIndex200ResponseAnyOf](doc/OrderIndex200ResponseAnyOf.md)
+ - [OrderIndex200ResponseAnyOf1](doc/OrderIndex200ResponseAnyOf1.md)
  - [OrderItemResource](doc/OrderItemResource.md)
  - [OrderRecipientItemResource](doc/OrderRecipientItemResource.md)
  - [OrderRecipientItemResponseResource](doc/OrderRecipientItemResponseResource.md)

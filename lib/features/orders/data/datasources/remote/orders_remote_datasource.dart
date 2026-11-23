@@ -2,7 +2,10 @@ import 'package:built_collection/built_collection.dart';
 import 'package:talbytk_api/talbytk_api.dart';
 
 import '../../../../../core/network/generated_api_client.dart';
+import '../../dto/orders_dto.dart';
+import '../../mappers/orders_mapper.dart';
 import '../../models/orders_model.dart';
+import '../../../domain/repositories/orders_paginated_reader.dart';
 import '../orders_datasource.dart';
 
 class OrdersRemoteDataSource implements OrdersDataSource {
@@ -10,20 +13,124 @@ class OrdersRemoteDataSource implements OrdersDataSource {
 
   final GeneratedApiClient generatedApiClient;
 
-  @override
-  Future<List<OrderModel>> getOrders() async {
-    final response = await generatedApiClient.orders.orderIndex(
-      extra: generatedApiClient.captureOrderAuthExtra(),
-    );
-    final responseBody = response.data;
+  static const int ordersPerPage = 20;
 
-    if (responseBody == null) {
-      throw StateError('Orders response does not contain data.');
+  /// Fetch exactly one server page; no local data is mutated here.
+  Future<OrdersPageSlice<OrderModel>> getOrdersPage({required int page}) async {
+    if (page < 1) {
+      throw ArgumentError.value(page, 'page', 'Page must be positive.');
     }
 
-    return List<OrderModel>.unmodifiable(
-      responseBody.data.map(_mapOrderResource),
+    final authExtra = generatedApiClient.captureOrderAuthExtra();
+    generatedApiClient.ensureProtectedRequestAuthCurrent(authExtra);
+
+    final response = await generatedApiClient.getJsonAuthenticated(
+      path: '/orders?page=$page&per_page=$ordersPerPage',
     );
+    generatedApiClient.ensureProtectedRequestAuthCurrent(authExtra);
+
+    final payload = response.data;
+    if (payload is! Map<String, dynamic>) {
+      throw const FormatException('Orders page must be a JSON object.');
+    }
+
+    final rawData = payload['data'];
+    final rawMeta = payload['meta'];
+    if (rawData is! List || rawMeta is! Map<String, dynamic>) {
+      throw const FormatException('Orders pagination data/meta missing.');
+    }
+
+    final currentPage = rawMeta['current_page'];
+    final lastPage = rawMeta['last_page'];
+    final perPage = rawMeta['per_page'];
+    final total = rawMeta['total'];
+
+    if (currentPage is! int ||
+        currentPage != page ||
+        lastPage is! int ||
+        lastPage < 1 ||
+        perPage is! int ||
+        perPage != ordersPerPage ||
+        total is! int ||
+        total < 0 ||
+        lastPage != (total == 0 ? 1 : (total + perPage - 1) ~/ perPage)) {
+      throw const FormatException('Inconsistent orders pagination meta.');
+    }
+
+    final expectedPageCount = page < lastPage
+        ? ordersPerPage
+        : total - (page - 1) * ordersPerPage;
+    if (rawData.length != expectedPageCount) {
+      throw const FormatException('Incomplete orders pagination page.');
+    }
+
+    final orders = <OrderModel>[];
+    final seenIds = <String>{};
+    for (final rawOrder in rawData) {
+      if (rawOrder is! Map<String, dynamic>) {
+        throw const FormatException('Order must be a JSON object.');
+      }
+
+      final aggregateStatus = rawOrder['aggregate_status'];
+      if (aggregateStatus is! String || aggregateStatus.isEmpty) {
+        throw const FormatException('Order aggregate_status missing.');
+      }
+
+      final order = OrdersMapper.toModel(
+        OrderDto.fromJson(rawOrder),
+      ).copyWith(aggregateStatus: aggregateStatus);
+      OrdersMapper.toEntity(order); // Reject unknown lifecycle values.
+      if (!seenIds.add(order.id)) {
+        throw const FormatException('Duplicate order within page.');
+      }
+      orders.add(order);
+    }
+
+    generatedApiClient.ensureProtectedRequestAuthCurrent(authExtra);
+    return OrdersPageSlice<OrderModel>(
+      items: List<OrderModel>.unmodifiable(orders),
+      page: page,
+      lastPage: lastPage,
+      total: total,
+    );
+  }
+
+  /// Compatibility path: full snapshots are required by legacy reconciliation.
+  @override
+  Future<List<OrderModel>> getOrders() async {
+    final authExtra = generatedApiClient.captureOrderAuthExtra();
+    final orders = <OrderModel>[];
+    final seenOrderIds = <String>{};
+    int? expectedTotal;
+    int? expectedLastPage;
+
+    for (var page = 1; ; page++) {
+      generatedApiClient.ensureProtectedRequestAuthCurrent(authExtra);
+      final result = await getOrdersPage(page: page);
+      generatedApiClient.ensureProtectedRequestAuthCurrent(authExtra);
+
+      if (expectedTotal != null &&
+          (expectedTotal != result.total ||
+              expectedLastPage != result.lastPage)) {
+        throw const FormatException('Orders pagination changed mid-refresh.');
+      }
+      expectedTotal ??= result.total;
+      expectedLastPage ??= result.lastPage;
+
+      for (final order in result.items) {
+        if (!seenOrderIds.add(order.id)) {
+          throw const FormatException('Duplicate order across pages.');
+        }
+        orders.add(order);
+      }
+      if (!result.hasMore) break;
+    }
+
+    generatedApiClient.ensureProtectedRequestAuthCurrent(authExtra);
+    if (orders.length != expectedTotal) {
+      throw const FormatException('Incomplete orders pagination snapshot.');
+    }
+    return List<OrderModel>.unmodifiable(orders);
   }
 
   @override

@@ -8,6 +8,7 @@ import 'package:built_value/json_object.dart';
 import 'package:built_value/serializer.dart';
 import 'package:dio/dio.dart';
 
+import 'package:talbytk_api/src/api_util.dart';
 import 'package:talbytk_api/src/model/auth_login403_response.dart';
 import 'package:talbytk_api/src/model/create_order_request.dart';
 import 'package:talbytk_api/src/model/inline_object.dart';
@@ -26,6 +27,8 @@ class OrderApi {
   /// 
   ///
   /// Parameters:
+  /// * [page] 
+  /// * [perPage] 
   /// * [cancelToken] - A [CancelToken] that can be used to cancel the operation
   /// * [headers] - Can be used to add additional headers to the request
   /// * [extras] - Can be used to add flags to the request
@@ -36,6 +39,8 @@ class OrderApi {
   /// Returns a [Future] containing a [Response] with a [OrderIndex200Response] as data
   /// Throws [DioException] if API call or serialization fails
   Future<Response<OrderIndex200Response>> orderIndex({ 
+    int? page,
+    int? perPage,
     CancelToken? cancelToken,
     Map<String, dynamic>? headers,
     Map<String, dynamic>? extra,
@@ -62,9 +67,15 @@ class OrderApi {
       validateStatus: validateStatus,
     );
 
+    final _queryParameters = <String, dynamic>{
+      if (page != null) r'page': encodeQueryParameter(_serializers, page, const FullType(int)),
+      if (perPage != null) r'per_page': encodeQueryParameter(_serializers, perPage, const FullType(int)),
+    };
+
     final _response = await _dio.request<Object>(
       _path,
       options: _options,
+      queryParameters: _queryParameters,
       cancelToken: cancelToken,
       onSendProgress: onSendProgress,
       onReceiveProgress: onReceiveProgress,

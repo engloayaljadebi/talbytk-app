@@ -28,6 +28,15 @@ class OrdersController extends ChangeNotifier {
   final OrderIdTransitionRegistry? transitionRegistry;
 
   OrdersState state = const OrdersState();
+  int _requestGeneration = 0;
+  bool _disposed = false;
+
+  @override
+  void dispose() {
+    _disposed = true;
+    _requestGeneration++;
+    super.dispose();
+  }
 
   /// البحث عن طلبية بواسطة المعرّف مع مراعاة انتقال المعرف المؤقت إلى المعرف النهائي.
   OrderEntity? findOrderById(String orderId) {
@@ -46,24 +55,96 @@ class OrdersController extends ChangeNotifier {
   ///
   /// Controller → UseCase → Repository → DataSource
   Future<void> loadOrders() async {
-    state = state.copyWith(isLoading: true, clearErrorMessage: true);
+    if (_disposed) return;
+    final generation = ++_requestGeneration;
+    state = state.copyWith(
+      isLoading: true,
+      isLoadingMore: false,
+      clearErrorMessage: true,
+      clearLoadMoreErrorMessage: true,
+    );
     notifyListeners();
 
     try {
-      final List<OrderEntity> orders = await _useCase.getOrders();
-
+      // Display existing Drift data immediately while page 1 is requested.
+      try {
+        final cached = await _useCase.getCachedOrdersPage(page: 1);
+        if (_disposed || generation != _requestGeneration) return;
+        if (cached != null && cached.items.isNotEmpty) {
+          state = state.copyWith(
+            orders: List<OrderEntity>.unmodifiable(cached.items),
+            hasMoreOrders: false,
+          );
+          notifyListeners();
+        }
+      } catch (_) {
+        if (_disposed || generation != _requestGeneration) return;
+        // A cache-read failure must not prevent the remote refresh.
+      }
+      final page = await _useCase.getOrdersPage(page: 1);
+      if (_disposed || generation != _requestGeneration) return;
       state = state.copyWith(
-        orders: List<OrderEntity>.unmodifiable(orders),
+        orders: List<OrderEntity>.unmodifiable(page.items),
         isLoading: false,
+        hasMoreOrders: page.hasMore,
+        nextPage: 2,
         clearErrorMessage: true,
+        clearLoadMoreErrorMessage: true,
       );
     } catch (_) {
+      if (_disposed || generation != _requestGeneration) return;
       state = state.copyWith(
         isLoading: false,
+        hasMoreOrders: false,
+        nextPage: 1,
         errorMessage: 'تعذر تحميل الطلبيات، حاول مرة أخرى',
       );
     }
+    notifyListeners();
+  }
 
+  Future<void> loadMoreOrders() async {
+    if (_disposed ||
+        state.isLoading ||
+        state.isLoadingMore ||
+        !state.hasMoreOrders) {
+      return;
+    }
+    final generation = _requestGeneration;
+    final requestedPage = state.nextPage;
+    state = state.copyWith(
+      isLoadingMore: true,
+      clearLoadMoreErrorMessage: true,
+    );
+    notifyListeners();
+
+    try {
+      final page = await _useCase.getOrdersPage(page: requestedPage);
+      if (_disposed || generation != _requestGeneration) return;
+      if (page.page != requestedPage) {
+        throw const FormatException('Unexpected orders page.');
+      }
+      final ids = state.orders.map((order) => order.id).toSet();
+      if (page.items.any((order) => !ids.add(order.id))) {
+        throw const FormatException('Duplicate orders across pages.');
+      }
+      state = state.copyWith(
+        orders: List<OrderEntity>.unmodifiable([
+          ...state.orders,
+          ...page.items,
+        ]),
+        isLoadingMore: false,
+        hasMoreOrders: page.hasMore,
+        nextPage: requestedPage + 1,
+        clearLoadMoreErrorMessage: true,
+      );
+    } catch (_) {
+      if (_disposed || generation != _requestGeneration) return;
+      state = state.copyWith(
+        isLoadingMore: false,
+        loadMoreErrorMessage: 'تعذر تحميل المزيد من الطلبيات. حاول مرة أخرى.',
+      );
+    }
     notifyListeners();
   }
 

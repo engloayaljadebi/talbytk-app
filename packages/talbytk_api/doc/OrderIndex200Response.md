@@ -9,6 +9,8 @@ import 'package:talbytk_api/api.dart';
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
 **data** | [**BuiltList&lt;OrderResource&gt;**](OrderResource.md) |  | 
+**links** | [**ProductIndex200ResponseLinks**](ProductIndex200ResponseLinks.md) |  | 
+**meta** | [**ProductIndex200ResponseMeta**](ProductIndex200ResponseMeta.md) |  | 
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

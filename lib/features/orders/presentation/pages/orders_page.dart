@@ -10,11 +10,38 @@ import '../providers/orders_provider.dart';
 import '../widgets/order_card_surface.dart';
 import 'order_details_page.dart';
 
-class OrdersPage extends ConsumerWidget {
+class OrdersPage extends ConsumerStatefulWidget {
   const OrdersPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<OrdersPage> createState() => _OrdersPageState();
+}
+
+class _OrdersPageState extends ConsumerState<OrdersPage> {
+  late final ScrollController _sentOrdersScrollController;
+
+  @override
+  void initState() {
+    super.initState();
+    _sentOrdersScrollController = ScrollController()
+      ..addListener(_onSentScroll);
+  }
+
+  void _onSentScroll() {
+    if (!_sentOrdersScrollController.hasClients) return;
+    if (_sentOrdersScrollController.position.extentAfter < 360) {
+      ref.read(ordersProvider).loadMoreOrders();
+    }
+  }
+
+  @override
+  void dispose() {
+    _sentOrdersScrollController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final controller = ref.watch(ordersProvider);
     final state = controller.state;
     final theme = Theme.of(context);
@@ -45,7 +72,12 @@ class OrdersPage extends ConsumerWidget {
           builder: (context, constraints) {
             final horizontalPadding = constraints.maxWidth >= 700 ? 24.0 : 16.0;
 
+            final showFooter =
+                state.hasMoreOrders ||
+                state.isLoadingMore ||
+                state.loadMoreErrorMessage != null;
             return ListView.separated(
+              controller: _sentOrdersScrollController,
               physics: const AlwaysScrollableScrollPhysics(),
               padding: EdgeInsets.fromLTRB(
                 horizontalPadding,
@@ -53,9 +85,31 @@ class OrdersPage extends ConsumerWidget {
                 horizontalPadding,
                 108,
               ),
-              itemCount: state.orders.length,
+              itemCount: state.orders.length + (showFooter ? 1 : 0),
               separatorBuilder: (_, _) => const SizedBox(height: 14),
               itemBuilder: (context, index) {
+                if (index == state.orders.length) {
+                  if (state.isLoadingMore) {
+                    return const Center(
+                      child: Padding(
+                        padding: EdgeInsets.all(18),
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  }
+                  return Center(
+                    child: TextButton.icon(
+                      key: const ValueKey<String>('orders-load-more'),
+                      onPressed: state.isLoading
+                          ? null
+                          : controller.loadMoreOrders,
+                      icon: const Icon(Icons.expand_more_rounded),
+                      label: Text(
+                        state.loadMoreErrorMessage ?? 'عرض المزيد من الطلبات',
+                      ),
+                    ),
+                  );
+                }
                 final order = state.orders[index];
 
                 return Center(
