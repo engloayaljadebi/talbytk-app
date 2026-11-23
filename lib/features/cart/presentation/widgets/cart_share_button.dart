@@ -9,8 +9,12 @@ import '../../sharing/cart_share_text.dart';
 import '../controllers/cart_controller.dart';
 import '../providers/cart_provider.dart';
 
+typedef CartShareHandler = Future<ShareResult> Function(ShareParams params);
+
 class CartShareButton extends ConsumerWidget {
-  const CartShareButton({super.key});
+  const CartShareButton({super.key, this.onShare});
+
+  final CartShareHandler? onShare;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -43,8 +47,12 @@ class CartShareButton extends ConsumerWidget {
     final items = List<CartItemEntity>.unmodifiable(cart.items);
     await showDialog<void>(
       context: context,
-      builder: (_) =>
-          _CartShareDialog(cart: cart, cartId: cartId, items: items),
+      builder: (_) => _CartShareDialog(
+        cart: cart,
+        cartId: cartId,
+        items: items,
+        onShare: onShare,
+      ),
     );
   }
 }
@@ -54,11 +62,13 @@ class _CartShareDialog extends ConsumerStatefulWidget {
     required this.cart,
     required this.cartId,
     required this.items,
+    this.onShare,
   });
 
   final CartController cart;
   final String? cartId;
   final List<CartItemEntity> items;
+  final CartShareHandler? onShare;
 
   @override
   ConsumerState<_CartShareDialog> createState() => _CartShareDialogState();
@@ -70,6 +80,12 @@ class _CartShareDialogState extends ConsumerState<_CartShareDialog> {
   bool _sharing = false;
   String? _error;
   final Set<int> _excludedNotes = {};
+
+  Future<ShareResult> _shareWithPlatform(ShareParams params) {
+    final handler = widget.onShare;
+    if (handler != null) return handler(params);
+    return SharePlus.instance.share(params);
+  }
 
   bool _isCurrentCart(CartController current) =>
       identical(current, widget.cart) &&
@@ -180,7 +196,7 @@ class _CartShareDialogState extends ConsumerState<_CartShareDialog> {
         final bytes = await buildCartSharePdf(data);
         if (!mounted || !_isCurrentCart(ref.read(cartProvider))) return;
 
-        await SharePlus.instance.share(
+        await _shareWithPlatform(
           ShareParams(
             files: [XFile.fromData(bytes, mimeType: 'application/pdf')],
             fileNameOverrides: const ['order-list.pdf'],
@@ -188,7 +204,7 @@ class _CartShareDialogState extends ConsumerState<_CartShareDialog> {
           ),
         );
       } else {
-        await SharePlus.instance.share(
+        await _shareWithPlatform(
           ShareParams(
             text: buildCartShareText(data),
             sharePositionOrigin: origin,
