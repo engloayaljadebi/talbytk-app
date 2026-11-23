@@ -279,6 +279,67 @@ void main() {
         remoteDataSource.createRequest!.idempotencyKey,
       );
     });
+    test(
+      'initial HTTP 429 respects Retry-After before background sync',
+      () async {
+        final database = AppDatabase.forTesting(NativeDatabase.memory());
+        addTearDown(database.close);
+        final fence = createLegacyOrderTestFence();
+        final local = OrdersLocalDataSource(database, sessionFence: fence);
+        final options = RequestOptions(path: '/orders');
+        final remote = _FakeRemoteOrdersDataSource(
+          createError: DioException(
+            requestOptions: options,
+            response: Response<dynamic>(
+              requestOptions: options,
+              statusCode: 429,
+              headers: Headers.fromMap({
+                'retry-after': ['180'],
+              }),
+            ),
+            type: DioExceptionType.badResponse,
+          ),
+        );
+        final repository = OrdersRepositoryImpl(
+          local,
+          sessionFence: fence,
+          remoteDataSource: remote,
+        );
+        final before = DateTime.now().toUtc();
+        final created = await repository.createOrder(
+          CreateOrderRequest(
+            supplierIds: const ['supplier-1'],
+            items: const [
+              OrderItemEntity(
+                productId: 'product-1',
+                productName: 'Product 1',
+                unitPrice: 100,
+                quantity: 1,
+                supplierId: 'supplier-1',
+                supplierName: 'Supplier 1',
+              ),
+            ],
+          ),
+        );
+        final operations = await database.select(database.syncOperations).get();
+        expect(created.id, startsWith('local-order-'));
+        expect(operations, hasLength(1));
+        expect(operations.single.status, SyncOperationStatuses.retrying);
+        expect(operations.single.attempts, 1);
+        expect(operations.single.entityId, created.id);
+        expect(
+          operations.single.nextAttemptAt!.isBefore(
+            before.add(const Duration(seconds: 180)),
+          ),
+          isFalse,
+        );
+        final payload =
+            jsonDecode(operations.single.payloadJson) as Map<String, dynamic>;
+        expect(payload['idempotencyKey'], remote.createRequest!.idempotencyKey);
+        expect((await local.getOrders()).single.id, created.id);
+      },
+    );
+
     test('preserves the local order and Outbox on HTTP 401', () async {
       final database = AppDatabase.forTesting(NativeDatabase.memory());
       addTearDown(database.close);
@@ -334,70 +395,89 @@ void main() {
       expect(payload['idempotencyKey'], remote.createRequest!.idempotencyKey);
     });
 
-    test('does not turn HTTP 422 into an offline order', () async {
-      final AppDatabase database = AppDatabase.forTesting(
-        NativeDatabase.memory(),
+    for (final statusCode in <int>[409, 422]) {
+      test(
+        'retains rejected order as a dead letter on HTTP $statusCode',
+        () async {
+          final AppDatabase database = AppDatabase.forTesting(
+            NativeDatabase.memory(),
+          );
+
+          addTearDown(database.close);
+
+          final localDataSource = OrdersLocalDataSource(
+            database,
+            sessionFence: createLegacyOrderTestFence(),
+          );
+
+          final requestOptions = RequestOptions(path: '/orders');
+
+          final remoteError = DioException(
+            requestOptions: requestOptions,
+            response: Response<dynamic>(
+              requestOptions: requestOptions,
+              statusCode: statusCode,
+              data: <String, dynamic>{'message': 'Order rejected'},
+            ),
+            type: DioExceptionType.badResponse,
+            message: 'Validation failed',
+          );
+
+          final remoteDataSource = _FakeRemoteOrdersDataSource(
+            createError: remoteError,
+          );
+
+          final repository = OrdersRepositoryImpl(
+            localDataSource,
+            sessionFence: createLegacyOrderTestFence(),
+            remoteDataSource: remoteDataSource,
+          );
+
+          final request = CreateOrderRequest(
+            supplierIds: const ['supplier-1'],
+            items: const [
+              OrderItemEntity(
+                productId: 'product-1',
+                productName: 'Product 1',
+                unitPrice: 100,
+                quantity: 1,
+                supplierId: 'supplier-1',
+                supplierName: 'Supplier 1',
+              ),
+            ],
+          );
+
+          await expectLater(
+            repository.createOrder(request),
+            throwsA(same(remoteError)),
+          );
+
+          final localOrders = await localDataSource.getOrders();
+
+          final syncOperations = await database
+              .select(database.syncOperations)
+              .get();
+
+          // Reject the submission without losing the local draft or retrying it.
+          expect(localOrders, hasLength(1));
+          expect(localOrders.single.id, startsWith('local-order-'));
+          expect(localOrders.single.items, hasLength(1));
+          expect(syncOperations, hasLength(1));
+          final operation = syncOperations.single;
+          expect(operation.entityId, localOrders.single.id);
+          expect(operation.status, SyncOperationStatuses.permanentFailure);
+          expect(operation.attempts, 1);
+          expect(operation.lastError, isNotNull);
+          expect(operation.nextAttemptAt, isNull);
+          final payload =
+              jsonDecode(operation.payloadJson) as Map<String, dynamic>;
+          expect(
+            payload['idempotencyKey'],
+            remoteDataSource.createRequest!.idempotencyKey,
+          );
+        },
       );
-
-      addTearDown(database.close);
-
-      final localDataSource = OrdersLocalDataSource(
-        database,
-        sessionFence: createLegacyOrderTestFence(),
-      );
-
-      final requestOptions = RequestOptions(path: '/orders');
-
-      final remoteError = DioException(
-        requestOptions: requestOptions,
-        response: Response<dynamic>(
-          requestOptions: requestOptions,
-          statusCode: 422,
-          data: <String, dynamic>{'message': 'Validation failed'},
-        ),
-        type: DioExceptionType.badResponse,
-        message: 'Validation failed',
-      );
-
-      final remoteDataSource = _FakeRemoteOrdersDataSource(
-        createError: remoteError,
-      );
-
-      final repository = OrdersRepositoryImpl(
-        localDataSource,
-        sessionFence: createLegacyOrderTestFence(),
-        remoteDataSource: remoteDataSource,
-      );
-
-      final request = CreateOrderRequest(
-        supplierIds: const ['supplier-1'],
-        items: const [
-          OrderItemEntity(
-            productId: 'product-1',
-            productName: 'Product 1',
-            unitPrice: 100,
-            quantity: 1,
-            supplierId: 'supplier-1',
-            supplierName: 'Supplier 1',
-          ),
-        ],
-      );
-
-      await expectLater(
-        repository.createOrder(request),
-        throwsA(same(remoteError)),
-      );
-
-      final localOrders = await localDataSource.getOrders();
-
-      final syncOperations = await database
-          .select(database.syncOperations)
-          .get();
-
-      // HTTP 422 ليس فقدان اتصال، لذلك لا ننشئ Offline Order.
-      expect(localOrders, isEmpty);
-      expect(syncOperations, isEmpty);
-    });
+    }
 
     test(
       'does not hide programming failures and keeps durable state',

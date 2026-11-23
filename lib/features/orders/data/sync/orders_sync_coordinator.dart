@@ -9,6 +9,7 @@ import '../../domain/services/order_id_transition_registry.dart';
 import '../datasources/local/orders_local_datasource.dart';
 import '../datasources/orders_datasource.dart';
 import '../models/orders_model.dart';
+import 'order_retry_policy.dart';
 
 final class OrdersSyncCoordinator {
   OrdersSyncCoordinator({
@@ -96,9 +97,10 @@ final class OrdersSyncCoordinator {
       lease.ensureCurrent();
 
       for (final SyncOperation operation in operations) {
-        lease.ensureCurrent();
+        if (!lease.isCurrent) return;
         try {
           await _syncCreate(operation, lease);
+          if (!lease.isCurrent) return;
         } on DioException catch (error) {
           if (error.response?.statusCode == 401) {
             return;
@@ -179,7 +181,30 @@ final class OrdersSyncCoordinator {
         serverOrderId: remoteOrder.id,
       );
     } catch (error) {
+      // A late response belongs to the old account. Leave its Outbox intact
+      // and stop silently; never reconcile or retry using the new session.
+      if (!lease.isCurrent) return;
+
       if (error is DioException && error.response?.statusCode == 401) {
+        // The auth interceptor may have already invalidated the session.
+        // In that case preserve the queued operation exactly as it was and
+        // propagate the 401 to stop this batch without a cross-account write.
+        if (lease.isCurrent) {
+          try {
+            await _localDataSource.markCreateSyncRetry(
+              operationId: operation.id,
+              attempts: attempts,
+              error: error,
+              nextAttemptAt: DateTime.now().toUtc().add(
+                OrderRetryPolicy.backoff(attempts),
+              ),
+            );
+          } on StateError {
+            // The session can also expire during the awaited DB transaction.
+            // Its ownership checks roll the transaction back in that case.
+            if (lease.isCurrent) rethrow;
+          }
+        }
         rethrow;
       }
 
@@ -200,7 +225,10 @@ final class OrdersSyncCoordinator {
         operationId: operation.id,
         attempts: attempts,
         error: error,
-        nextAttemptAt: DateTime.now().toUtc().add(_retryDelay(attempts)),
+        nextAttemptAt: OrderRetryPolicy.nextAttemptAt(
+          error: error,
+          attempts: attempts,
+        ),
       );
     }
   }
@@ -221,19 +249,6 @@ final class OrdersSyncCoordinator {
         statusCode < 500 &&
         statusCode != 408 &&
         statusCode != 429;
-  }
-
-  Duration _retryDelay(int attempts) {
-    switch (attempts) {
-      case 1:
-        return const Duration(seconds: 30);
-      case 2:
-        return const Duration(minutes: 1);
-      case 3:
-        return const Duration(minutes: 5);
-      default:
-        return const Duration(minutes: 15);
-    }
   }
 
   CreateOrderModel _decodeCreatePayload(String payloadJson) {
