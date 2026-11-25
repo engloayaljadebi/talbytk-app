@@ -169,15 +169,15 @@ void main() {
 
       await tester.pumpAndSettle();
 
-      expect(find.text('تحديد الكل كمقروء'), findsOneWidget);
+      expect(find.byTooltip('تحديد الكل كمقروء'), findsOneWidget);
 
-      await tester.tap(find.text('تحديد الكل كمقروء'));
+      await tester.tap(find.byTooltip('تحديد الكل كمقروء'));
 
       await tester.pumpAndSettle();
 
       expect(repository.markAllReadUserIds, <String>['user-a']);
 
-      expect(find.text('تحديد الكل كمقروء'), findsNothing);
+      expect(find.byTooltip('تحديد الكل كمقروء'), findsNothing);
     });
 
     testWidgets('shows failure state and retry reloads the same user', (

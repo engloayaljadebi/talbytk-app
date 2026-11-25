@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -63,19 +65,27 @@ void main() {
       autoLoad: false,
     );
 
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(320, 640);
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    var requests = 0;
+    final refresh = Completer<Map<String, AccountBusinessApproval>>();
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          accountBusinessApprovalsProvider.overrideWith(
-            (ref, userId) async => const <String, AccountBusinessApproval>{
+          accountBusinessApprovalsProvider.overrideWith((ref, userId) async {
+            requests++;
+            if (requests == 2) return refresh.future;
+            return <String, AccountBusinessApproval>{
               'business-1': AccountBusinessApproval(
                 businessId: 'business-1',
-                shopStatus: null,
-                supplierStatus: 'approved',
+                shopStatus: 'pending',
+                supplierStatus: requests == 1 ? 'pending' : 'approved',
                 supplierEnabled: true,
               ),
-            },
-          ),
+            };
+          }),
           generatedApiClientProvider.overrideWithValue(
             GeneratedApiClient.create(baseUrl: 'http://127.0.0.1:8000/api/v1'),
           ),
@@ -88,16 +98,54 @@ void main() {
             (ref, businessId) => ordersController,
           ),
         ],
-        child: const MaterialApp(home: AccountPage()),
+        child: const MaterialApp(
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: AccountPage(),
+          ),
+        ),
       ),
     );
 
     await tester.pumpAndSettle();
 
-    final supplierSettings = find.widgetWithIcon(
-      FilledButton,
-      Icons.edit_outlined,
+    final pencil = find.byTooltip('تعديل الملف الشخصي');
+    expect(find.text('تعديل الملف الشخصي'), findsNothing);
+    expect(find.bySemanticsLabel('تعديل الملف الشخصي'), findsOneWidget);
+    expect(tester.getSize(pencil), const Size(48, 48));
+    await tester.tap(pencil);
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<BusinessProfileEditPage>(find.byType(BusinessProfileEditPage))
+          .business
+          .id,
+      business.id,
     );
+    await tester.pageBack();
+    await tester.pumpAndSettle();
+    final refreshButton = find.byTooltip('تحديث حالة المراجعة');
+    expect(find.bySemanticsLabel('تحديث حالة المراجعة'), findsOneWidget);
+    expect(tester.getSize(refreshButton), const Size(48, 48));
+    expect(find.textContaining('العميل: قيد المراجعة'), findsOneWidget);
+    await tester.tap(refreshButton);
+    await tester.tap(refreshButton);
+    await tester.pump();
+    expect(requests, 2);
+    expect(
+      find.descendant(
+        of: find.byKey(const ValueKey('account-review-refresh-loading')),
+        matching: find.byType(CircularProgressIndicator),
+      ),
+      findsOneWidget,
+    );
+    refresh.completeError(StateError('offline'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('تعذر تحديث حالة المراجعة'), findsOneWidget);
+    await tester.tap(refreshButton);
+    await tester.pumpAndSettle();
+    expect(requests, 3);
+    final supplierSettings = find.byTooltip('تعديل الملف الشخصي');
 
     expect(supplierSettings, findsOneWidget);
 

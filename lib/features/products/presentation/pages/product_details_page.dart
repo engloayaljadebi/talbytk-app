@@ -105,8 +105,10 @@ class _ProductDetailsPageState extends ConsumerState<ProductDetailsPage> {
         slivers: [
           SliverToBoxAdapter(
             child: Container(
-              height: 290,
-              color: Colors.white,
+              height: (MediaQuery.sizeOf(context).height * 0.30)
+                  .clamp(156.0, 290.0)
+                  .toDouble(),
+              color: Theme.of(context).colorScheme.surface,
               padding: const EdgeInsets.all(24),
 
               // يعرض الصورة المحلية أولًا ثم السحابية.

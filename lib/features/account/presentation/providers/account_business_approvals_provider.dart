@@ -29,15 +29,16 @@ final class AccountBusinessApproval {
   String get reviewDescription {
     final entries = <String>[];
     if (shopStatus != null) {
-      entries.add('العميل: ${_label(shopStatus!)}');
+      entries.add('العميل: ${statusLabel(shopStatus!)}');
     }
     if (supplierStatus != null) {
-      entries.add('المورد: ${_label(supplierStatus!)}');
+      entries.add('المورد: ${statusLabel(supplierStatus!)}');
     }
     return entries.isEmpty ? 'لا يوجد طلب اعتماد مسجل' : entries.join(' — ');
   }
 
-  static String _label(String status) => switch (status) {
+  /// Arabic label for a backend verification status (same mapping as before).
+  static String statusLabel(String status) => switch (status) {
     'pending' => 'قيد المراجعة',
     'approved' => 'تمت الموافقة',
     'rejected' => 'مرفوض',
