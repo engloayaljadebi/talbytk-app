@@ -130,9 +130,9 @@ final class ReceivedOrdersPage extends ConsumerWidget {
       onRefresh: controller.loadReceivedOrders,
       child: ListView.separated(
         physics: const AlwaysScrollableScrollPhysics(),
-        padding: const EdgeInsets.fromLTRB(_pagePadding, 16, _pagePadding, 36),
+        padding: const EdgeInsets.fromLTRB(_pagePadding, 8, _pagePadding, 24),
         itemCount: state.orders.length + 1,
-        separatorBuilder: (_, _) => const SizedBox(height: 14),
+        separatorBuilder: (_, _) => const SizedBox(height: 8),
         itemBuilder: (context, index) {
           if (index == 0) {
             return Center(

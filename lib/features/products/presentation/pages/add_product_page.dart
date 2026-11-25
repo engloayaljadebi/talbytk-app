@@ -436,12 +436,14 @@ class _AddProductPageState extends ConsumerState<AddProductPage> {
         key: _formKey,
         autovalidateMode: AutovalidateMode.onUserInteraction,
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 64),
           children: [
             // يعرض اسم المورد صاحب المنتج.
             Card(
+              margin: EdgeInsets.zero,
               elevation: 0,
               child: ListTile(
+                dense: true,
                 leading: const CircleAvatar(
                   child: Icon(Icons.storefront_outlined),
                 ),

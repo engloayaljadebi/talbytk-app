@@ -169,53 +169,18 @@ final class _BusinessProfileEditPageState
           child: Form(
             key: _formKey,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: colors.surfaceContainerLow,
-                    borderRadius: BorderRadius.circular(20),
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: Icon(
+                    Icons.storefront_outlined,
+                    color: colors.primary,
                   ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: BoxDecoration(
-                          color: colors.primary.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        alignment: Alignment.center,
-                        child: Icon(
-                          Icons.storefront_rounded,
-                          color: colors.primary,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'الهوية الأساسية',
-                              style: Theme.of(context).textTheme.titleMedium
-                                  ?.copyWith(fontWeight: FontWeight.w800),
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'هذه البيانات تظهر للمستخدمين '
-                              'وتعرّف نشاطك داخل طلبيتك.',
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: colors.onSurfaceVariant),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
+                  title: const Text('الهوية الأساسية'),
+                  subtitle: const Text('هذه البيانات تعرّف نشاطك داخل طلبيتك.'),
                 ),
-                const SizedBox(height: 18),
+                const SizedBox(height: 12),
                 TextFormField(
                   key: const ValueKey<String>('business-profile-name'),
                   controller: _nameController,
@@ -249,7 +214,7 @@ final class _BusinessProfileEditPageState
                   controller: _descriptionController,
                   enabled: !state.isSaving,
                   maxLength: 5000,
-                  minLines: 4,
+                  minLines: 2,
                   maxLines: 8,
                   validator: _validateDescription,
                   decoration: const InputDecoration(

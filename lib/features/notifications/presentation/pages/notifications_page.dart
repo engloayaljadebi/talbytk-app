@@ -52,17 +52,19 @@ final class _NotificationsPageState extends ConsumerState<NotificationsPage> {
           ),
           actions: [
             if (state.hasUnread)
-              TextButton(
+              IconButton(
+                tooltip: 'تحديد الكل كمقروء',
+                constraints: const BoxConstraints.tightFor(
+                  width: 48,
+                  height: 48,
+                ),
                 key: const ValueKey<String>('notifications-mark-all-read'),
                 onPressed: state.isMutating
                     ? null
                     : () async {
                         await controller.markAllRead();
                       },
-                child: const Text(
-                  'تحديد الكل كمقروء',
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                ),
+                icon: const Icon(Icons.done_all_rounded),
               ),
           ],
         ),
