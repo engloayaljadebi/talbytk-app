@@ -21,6 +21,8 @@ RUN composer install --no-dev --no-interaction --optimize-autoloader \
 COPY --from=assets /build/public/build ./public/build
 
 ENV XDG_CONFIG_HOME=/tmp/caddy-config XDG_DATA_HOME=/tmp/caddy-data
+RUN setcap -r /usr/local/bin/frankenphp
+
 USER www-data
 EXPOSE 10000
 ENTRYPOINT ["/bin/sh", "/app/deploy/start-render.sh"]
