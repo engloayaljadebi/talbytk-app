@@ -78,6 +78,7 @@ void main() {
     await enter(tester, 'password-confirmation', 'ValidPassword123');
     await advance(tester); // Account -> Business
     expect(find.text('المرحلة 3 من 5 — النشاط'), findsOneWidget);
+    expect(find.byKey(const ValueKey('register-description')), findsNothing);
     await enter(tester, 'name', supplier ? 'مؤسسة التوريد' : 'متجر الاختبار');
     await selectCategory(tester);
     await advance(tester); // Business -> Location

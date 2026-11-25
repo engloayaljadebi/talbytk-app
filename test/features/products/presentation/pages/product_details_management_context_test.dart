@@ -5,14 +5,14 @@ import 'package:talbytk/features/cart/presentation/controllers/cart_controller.d
 import 'package:talbytk/features/cart/presentation/providers/cart_provider.dart';
 import 'package:talbytk/features/products/domain/entities/products_entity.dart';
 import 'package:talbytk/features/products/presentation/pages/product_details_page.dart';
+import 'package:talbytk/features/supplier_follow/domain/repositories/supplier_follow_repository.dart';
+import 'package:talbytk/features/supplier_follow/presentation/providers/supplier_follow_provider.dart';
 
 void main() {
   testWidgets('matching managed Business exposes Product management', (
     tester,
   ) async {
-    final container = ProviderContainer(
-      overrides: [cartProvider.overrideWith((ref) => CartController())],
-    );
+    final container = _createContainer();
 
     addTearDown(container.dispose);
 
@@ -49,9 +49,7 @@ void main() {
   testWidgets('public Product details do not expose supplier management', (
     tester,
   ) async {
-    final container = ProviderContainer(
-      overrides: [cartProvider.overrideWith((ref) => CartController())],
-    );
+    final container = _createContainer();
 
     addTearDown(container.dispose);
 
@@ -82,9 +80,7 @@ void main() {
   testWidgets(
     'public details stay safe even when supplierId matches a real Business ID',
     (tester) async {
-      final container = ProviderContainer(
-        overrides: [cartProvider.overrideWith((ref) => CartController())],
-      );
+      final container = _createContainer();
 
       addTearDown(container.dispose);
 
@@ -113,4 +109,26 @@ void main() {
       expect(find.text('Public Product'), findsOneWidget);
     },
   );
+}
+
+ProviderContainer _createContainer() {
+  return ProviderContainer(
+    overrides: [
+      supplierFollowRepositoryProvider.overrideWithValue(
+        _FakeSupplierFollowRepository(),
+      ),
+      cartProvider.overrideWith((ref) => CartController()),
+    ],
+  );
+}
+
+final class _FakeSupplierFollowRepository implements SupplierFollowRepository {
+  @override
+  Future<bool> isFollowing(String businessId) async => false;
+
+  @override
+  Future<bool> follow(String businessId) async => true;
+
+  @override
+  Future<bool> unfollow(String businessId) async => false;
 }

@@ -36,7 +36,6 @@ final class _RegisterPageState extends ConsumerState<RegisterPage> {
   final _password = TextEditingController();
   final _confirmation = TextEditingController();
   final _businessName = TextEditingController();
-  final _description = TextEditingController();
   final _locationName = TextEditingController();
   final _administrativeArea = TextEditingController();
   final _locality = TextEditingController();
@@ -81,7 +80,6 @@ final class _RegisterPageState extends ConsumerState<RegisterPage> {
       _password,
       _confirmation,
       _businessName,
-      _description,
       _locationName,
       _administrativeArea,
       _locality,
@@ -99,13 +97,6 @@ final class _RegisterPageState extends ConsumerState<RegisterPage> {
     }
     if (text.length < min || text.length > max) {
       return 'يجب أن يكون بين $min و$max حرفًا';
-    }
-    return null;
-  }
-
-  String? _optional(String? value, {int max = 160}) {
-    if ((value ?? '').trim().length > max) {
-      return 'الحد الأقصى $max حرفًا';
     }
     return null;
   }
@@ -169,7 +160,7 @@ final class _RegisterPageState extends ConsumerState<RegisterPage> {
       'password',
       'password_confirmation',
     };
-    const business = <String>{'name', 'description', 'category_id'};
+    const business = <String>{'name', 'category_id'};
     const location = <String>{
       'location_name',
       'administrative_area',
@@ -491,14 +482,6 @@ final class _RegisterPageState extends ConsumerState<RegisterPage> {
         enabled: !busy,
         validator: (v) => _required(v, min: 2, max: 200),
       ),
-      _field(
-        keyName: 'description',
-        label: 'وصف النشاط (اختياري)',
-        controller: _description,
-        enabled: !busy,
-        maxLines: 3,
-        validator: (v) => _optional(v, max: 5000),
-      ),
       if (_loadingCategories)
         const Center(child: CircularProgressIndicator())
       else if (_categoriesError != null) ...[
@@ -679,7 +662,6 @@ final class _RegisterPageState extends ConsumerState<RegisterPage> {
   }
 
   Map<String, Object?> _payload() {
-    final description = _description.text.trim();
     return {
       'username': _username.text.trim(),
       'display_name': _displayName.text.trim(),
@@ -690,7 +672,6 @@ final class _RegisterPageState extends ConsumerState<RegisterPage> {
       'device_name': _deviceName,
       'account_type': _kind == _AccountKind.shop ? 'shop' : 'supplier',
       'name': _businessName.text.trim(),
-      if (description.isNotEmpty) 'description': description,
       'category_id': _categoryId,
       'location_name': _locationName.text.trim(),
       'administrative_area': _administrativeArea.text.trim(),
