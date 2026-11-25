@@ -22,6 +22,7 @@ import 'package:talbytk/core/router/route_names.dart';
 
 import '../providers/auth_providers.dart';
 import '../states/auth_state.dart';
+import '../widgets/auth_surface.dart';
 
 final class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -72,135 +73,127 @@ final class _LoginPageState extends ConsumerState<LoginPage> {
 
     final isLoading = state.status == AuthStatus.authenticating;
 
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Form(
-                key: _formKey,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'طلبيتك',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.headlineMedium
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'تسجيل الدخول',
-                      textAlign: TextAlign.center,
-                      style: Theme.of(context).textTheme.titleMedium,
-                    ),
-                    const SizedBox(height: 32),
-
-                    TextFormField(
-                      controller: _loginController,
-                      enabled: !isLoading,
-                      textInputAction: TextInputAction.next,
-                      autofillHints: const [AutofillHints.username],
-                      decoration: const InputDecoration(
-                        labelText: 'اسم المستخدم أو البريد أو الهاتف',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
+    return AuthSurface(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Form(
+              key: _formKey,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Align(
+                    alignment: AlignmentDirectional.centerStart,
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: Image.asset(
+                        'assets/icon/logo.png',
+                        width: 64,
+                        height: 64,
+                        semanticLabel: 'طلبيتك',
                       ),
-                      validator: (value) {
-                        if (value == null || value.trim().isEmpty) {
-                          return 'أدخل بيانات تسجيل الدخول';
-                        }
-
-                        return null;
-                      },
                     ),
+                  ),
+                  const SizedBox(height: 24),
+                  Text(
+                    'أهلًا بك في طلبيتك',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  const Text('سجّل الدخول إلى حسابك'),
+                  const SizedBox(height: 28),
 
-                    const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _loginController,
+                    enabled: !isLoading,
+                    textInputAction: TextInputAction.next,
+                    autofillHints: const [AutofillHints.username],
+                    decoration: const InputDecoration(
+                      labelText: 'اسم المستخدم أو البريد أو الهاتف',
+                      prefixIcon: Icon(Icons.person_outline),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'أدخل بيانات تسجيل الدخول';
+                      }
 
-                    TextFormField(
-                      controller: _passwordController,
-                      enabled: !isLoading,
-                      obscureText: _obscurePassword,
-                      textInputAction: TextInputAction.done,
-                      autofillHints: const [AutofillHints.password],
-                      onFieldSubmitted: (_) {
-                        if (!isLoading) {
-                          _submit();
-                        }
-                      },
-                      decoration: InputDecoration(
-                        labelText: 'كلمة المرور',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        border: const OutlineInputBorder(),
-                        suffixIcon: IconButton(
-                          onPressed: isLoading
-                              ? null
-                              : () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
-                          icon: Icon(
-                            _obscurePassword
-                                ? Icons.visibility_outlined
-                                : Icons.visibility_off_outlined,
-                          ),
+                      return null;
+                    },
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  TextFormField(
+                    controller: _passwordController,
+                    enabled: !isLoading,
+                    obscureText: _obscurePassword,
+                    textInputAction: TextInputAction.done,
+                    autofillHints: const [AutofillHints.password],
+                    onFieldSubmitted: (_) {
+                      if (!isLoading) {
+                        _submit();
+                      }
+                    },
+                    decoration: InputDecoration(
+                      labelText: 'كلمة المرور',
+                      prefixIcon: const Icon(Icons.lock_outline),
+                      suffixIcon: IconButton(
+                        tooltip: _obscurePassword
+                            ? 'إظهار كلمة المرور'
+                            : 'إخفاء كلمة المرور',
+                        onPressed: isLoading
+                            ? null
+                            : () {
+                                setState(() {
+                                  _obscurePassword = !_obscurePassword;
+                                });
+                              },
+                        icon: Icon(
+                          _obscurePassword
+                              ? Icons.visibility_outlined
+                              : Icons.visibility_off_outlined,
                         ),
                       ),
-                      validator: (value) {
-                        /*
+                    ),
+                    validator: (value) {
+                      /*
                          * لا نستخدم trim هنا؛ لأن المسافات
                          * قد تكون جزءًا من كلمة المرور.
                          */
-                        if (value == null || value.isEmpty) {
-                          return 'أدخل كلمة المرور';
-                        }
+                      if (value == null || value.isEmpty) {
+                        return 'أدخل كلمة المرور';
+                      }
 
-                        return null;
-                      },
-                    ),
+                      return null;
+                    },
+                  ),
 
-                    if (state.status == AuthStatus.failure &&
-                        state.errorMessage != null) ...[
-                      const SizedBox(height: 16),
-                      Text(
-                        state.errorMessage!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.error,
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 24),
-
-                    FilledButton(
-                      onPressed: isLoading ? null : _submit,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        child: isLoading
-                            ? const SizedBox(
-                                width: 22,
-                                height: 22,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Text('تسجيل الدخول'),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextButton.icon(
-                      onPressed: isLoading
-                          ? null
-                          : () => context.push(RouteNames.register),
-                      icon: const Icon(Icons.person_add_alt_1_outlined),
-                      label: const Text('إنشاء حساب جديد'),
-                    ),
+                  if (state.status == AuthStatus.failure &&
+                      state.errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    AuthErrorMessage(state.errorMessage!),
                   ],
-                ),
+
+                  const SizedBox(height: 24),
+
+                  AuthPrimaryButton(
+                    label: 'تسجيل الدخول',
+                    busy: isLoading,
+                    onPressed: _submit,
+                  ),
+                  const SizedBox(height: 12),
+                  TextButton.icon(
+                    onPressed: isLoading
+                        ? null
+                        : () => context.push(RouteNames.register),
+                    icon: const Icon(Icons.person_add_alt_1_outlined),
+                    label: const Text('إنشاء حساب جديد'),
+                  ),
+                ],
               ),
             ),
           ),

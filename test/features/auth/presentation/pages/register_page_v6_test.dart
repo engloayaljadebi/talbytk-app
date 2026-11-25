@@ -70,25 +70,23 @@ void main() {
       await tester.pumpAndSettle();
     }
     await advance(tester); // Type -> Account
-    expect(find.text('المرحلة 2 من 6 — الحساب'), findsOneWidget);
+    expect(find.text('المرحلة 2 من 5 — الحساب'), findsOneWidget);
     await enter(tester, 'username', supplier ? 'supplier123' : 'shop123');
     await enter(tester, 'display_name', 'مستخدم تجريبي');
     await enter(tester, 'contact_value', '777123456');
     await enter(tester, 'password', 'ValidPassword123');
     await enter(tester, 'password-confirmation', 'ValidPassword123');
-    await advance(tester); // Account -> Personal
-    expect(find.text('المرحلة 3 من 6 — الشخصية'), findsOneWidget);
-    await advance(tester); // Personal -> Business (optional details)
-    expect(find.text('المرحلة 4 من 6 — النشاط'), findsOneWidget);
+    await advance(tester); // Account -> Business
+    expect(find.text('المرحلة 3 من 5 — النشاط'), findsOneWidget);
     await enter(tester, 'name', supplier ? 'مؤسسة التوريد' : 'متجر الاختبار');
     await selectCategory(tester);
     await advance(tester); // Business -> Location
-    expect(find.text('المرحلة 5 من 6 — الموقع'), findsOneWidget);
+    expect(find.text('المرحلة 4 من 5 — الموقع'), findsOneWidget);
     await enter(tester, 'location_name', 'الموقع الرئيسي');
     await enter(tester, 'administrative_area', 'صنعاء');
     await enter(tester, 'locality', 'أمانة العاصمة');
     await advance(tester); // Location -> Review
-    expect(find.text('المرحلة 6 من 6 — المراجعة'), findsOneWidget);
+    expect(find.text('المرحلة 5 من 5 — المراجعة'), findsOneWidget);
   }
 
   group('Mobile registration V6 screen', () {
@@ -97,7 +95,7 @@ void main() {
       expect(find.text('متجر'), findsOneWidget);
       expect(find.text('مورد'), findsOneWidget);
       expect(find.text('عميل عادي'), findsNothing);
-      expect(find.text('المرحلة 1 من 6 — النوع'), findsOneWidget);
+      expect(find.text('المرحلة 1 من 5 — النوع'), findsOneWidget);
     });
 
     testWidgets('required account fields block navigation and submission', (
@@ -106,7 +104,7 @@ void main() {
       await mount(tester);
       await advance(tester); // Type -> Account
       await advance(tester); // Empty account must not advance
-      expect(find.text('المرحلة 2 من 6 — الحساب'), findsOneWidget);
+      expect(find.text('المرحلة 2 من 5 — الحساب'), findsOneWidget);
       expect(repository.submissions, isEmpty);
     });
 
@@ -120,7 +118,21 @@ void main() {
       final submitted = repository.submissions.single;
       expect(submitted['account_type'], 'supplier');
       expect(submitted['category_id'], _categoryId);
-      expect(submitted['location_type'], 'warehouse');
+      expect(submitted.keys.toSet(), {
+        'account_type',
+        'category_id',
+        'name',
+        'username',
+        'display_name',
+        'password',
+        'password_confirmation',
+        'contact_type',
+        'contact_value',
+        'device_name',
+        'location_name',
+        'administrative_area',
+        'locality',
+      });
       expect(submitted['contact_type'], 'phone');
       expect(submitted['contact_value'], '777123456');
       expect(controller.state.status, AuthStatus.authenticated);
@@ -140,7 +152,7 @@ void main() {
       expect(repository.submissions.single['account_type'], 'shop');
       expect(repository.submissions.single['category_id'], _categoryId);
       expect(controller.state.isAuthenticated, isFalse);
-      expect(find.text('المرحلة 2 من 6 — الحساب'), findsOneWidget);
+      expect(find.text('المرحلة 2 من 5 — الحساب'), findsOneWidget);
 
       expect(find.text('اسم المستخدم مستخدم مسبقًا.'), findsOneWidget);
       expect(find.text('رقم الهاتف مستخدم مسبقًا.'), findsOneWidget);
@@ -161,8 +173,11 @@ void main() {
         await advance(tester);
         expect(repository.submissions, hasLength(1));
         expect(repository.submissions.single['account_type'], 'supplier');
-        expect(repository.submissions.single['location_type'], 'warehouse');
-        expect(find.text('المرحلة 4 من 6 — النشاط'), findsOneWidget);
+        expect(
+          repository.submissions.single.containsKey('location_type'),
+          isFalse,
+        );
+        expect(find.text('المرحلة 3 من 5 — النشاط'), findsOneWidget);
         expect(find.text('فئة النشاط غير متاحة حاليًا.'), findsOneWidget);
       },
     );
@@ -175,7 +190,7 @@ void main() {
       await fillThroughReview(tester);
       await advance(tester);
       expect(repository.submissions, hasLength(1));
-      expect(find.text('المرحلة 6 من 6 — المراجعة'), findsOneWidget);
+      expect(find.text('المرحلة 5 من 5 — المراجعة'), findsOneWidget);
       expect(
         find.text('تعذر إنشاء الحساب. تحقق من البيانات وحاول مرة أخرى.'),
         findsOneWidget,

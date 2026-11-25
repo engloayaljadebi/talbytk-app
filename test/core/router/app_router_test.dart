@@ -60,6 +60,7 @@ void main() {
   Future<ProviderContainer> pumpRouter({
     required WidgetTester tester,
     required FakeAuthRepository repository,
+    TextDirection? direction,
   }) async {
     final container = ProviderContainer(
       overrides: [
@@ -91,7 +92,13 @@ void main() {
     await tester.pumpWidget(
       UncontrolledProviderScope(
         container: container,
-        child: MaterialApp.router(routerConfig: router),
+        child: MaterialApp.router(
+          routerConfig: router,
+          builder: direction == null
+              ? null
+              : (_, child) =>
+                    Directionality(textDirection: direction, child: child!),
+        ),
       ),
     );
 
@@ -134,6 +141,51 @@ void main() {
 
       expect(find.byType(RegisterPage), findsOneWidget);
       expect(find.byType(LoginPage), findsNothing);
+    });
+
+    testWidgets('compact login validates and preserves input on return', (
+      tester,
+    ) async {
+      tester.view.devicePixelRatio = 1;
+      tester.view.physicalSize = const Size(320, 568);
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+      await pumpRouter(
+        direction: TextDirection.rtl,
+        tester: tester,
+        repository: FakeAuthRepository(
+          restoreResult: null,
+          loginResult: session,
+          currentUserResult: user,
+        ),
+      );
+      final submit = find.text('تسجيل الدخول');
+      await tester.ensureVisible(submit);
+      await tester.tap(submit);
+      await tester.pump();
+      expect(find.text('أدخل كلمة المرور'), findsOneWidget);
+      final username = find.byType(TextFormField).first;
+      await tester.enterText(username, 'talbytk123');
+      tester.view.viewInsets = const FakeViewPadding(bottom: 230);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+      final toggle = find.byTooltip('إظهار كلمة المرور');
+      await tester.ensureVisible(toggle);
+      await tester.tap(toggle);
+      await tester.pump();
+      expect(find.byTooltip('إخفاء كلمة المرور'), findsOneWidget);
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      final register = find.text('إنشاء حساب جديد');
+      await tester.ensureVisible(register);
+      await tester.tap(register);
+      await pumpRouterFrames(tester);
+      final login = find.text('لديك حساب؟ تسجيل الدخول');
+      await tester.ensureVisible(login);
+      await tester.tap(login);
+      await pumpRouterFrames(tester);
+      expect(find.text('talbytk123'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
 
     testWidgets('registration link works after login failure', (tester) async {
