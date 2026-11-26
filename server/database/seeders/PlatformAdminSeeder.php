@@ -12,6 +12,7 @@ use RuntimeException;
 final class PlatformAdminSeeder extends Seeder
 {
     private const USERNAME = 'admin2026';
+
     private const ROLE_CODE = 'platform_admin';
 
     public function run(): void

@@ -5,9 +5,9 @@ namespace Tests\Feature\Platform;
 use App\Models\User;
 use Database\Seeders\PlatformAdminSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\DB;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -34,7 +34,7 @@ class PlatformAdminSeederTest extends TestCase
         putenv('TALBYTK_PLATFORM_ADMIN_SEED_ENABLED=true');
 
         putenv(
-            'TALBYTK_PLATFORM_ADMIN_PASSWORD=' . self::TEST_PASSWORD
+            'TALBYTK_PLATFORM_ADMIN_PASSWORD='.self::TEST_PASSWORD
         );
     }
 
@@ -44,7 +44,7 @@ class PlatformAdminSeederTest extends TestCase
             if ($value === false) {
                 putenv($key);
             } else {
-                putenv($key . '=' . $value);
+                putenv($key.'='.$value);
             }
         }
 
